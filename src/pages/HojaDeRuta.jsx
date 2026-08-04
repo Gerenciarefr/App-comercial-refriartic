@@ -725,18 +725,20 @@ export default function HojaDeRuta() {
           onClose={() => setDiaSeleccionado(null)}
           onToggleCumplida={toggleCumplida}
           onReprogramada={cargar}
+          onMisionEliminada={cargar}
         />
       )}
     </div>
   )
 }
 
-function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose, onToggleCumplida, onReprogramada }) {
+function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose, onToggleCumplida, onReprogramada, onMisionEliminada }) {
   const [expandidoId, setExpandidoId] = useState(null)
   const [extra, setExtra] = useState({}) // { [misionId]: { telefono, nombreContacto, estadoLead, tareaCompletable, cargando } }
   const [mensajes, setMensajes] = useState([])
   const [copiadoId, setCopiadoId] = useState(null)
   const [reprogramando, setReprogramando] = useState(null)
+  const [eliminandoMision, setEliminandoMision] = useState(null)
 
   const esteDiaEsDomingo = esDomingo(aYMD(fecha))
 
@@ -844,6 +846,24 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
       if (error) return alert('No se pudo actualizar: ' + error.message)
     }
     setExtra((prev) => ({ ...prev, [misionId]: { ...prev[misionId], estadoLead: nuevoEstado } }))
+  }
+
+  // Solo se pueden eliminar misiones creadas manualmente (tabla manual_tasks)
+  // — las automáticas las genera el sistema y no se deben borrar a mano.
+  const eliminarMision = async (mision) => {
+    const ok = window.confirm(`¿Eliminar la misión "${mision.titulo}"? Esta acción no se puede deshacer.`)
+    if (!ok) return
+
+    setEliminandoMision(mision.id)
+    const { error } = await supabase.from('manual_tasks').delete().eq('id', mision.idOriginal)
+    setEliminandoMision(null)
+
+    if (error) {
+      alert('No se pudo eliminar la misión: ' + error.message)
+      return
+    }
+    onMisionEliminada?.()
+    onClose()
   }
 
   const completarTarea = async (misionId, tarea) => {
@@ -1082,6 +1102,22 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                         <p className="text-xs font-medium text-center py-2" style={{ color: '#0F6E56' }}>
                           Sin seguimiento pendiente para este lead por ahora
                         </p>
+                      )}
+
+                      {/* Eliminar misión: solo el director, y solo para
+                          misiones creadas manualmente (no automáticas). */}
+                      {esDirector && m.tabla === 'manual_tasks' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            eliminarMision(m)
+                          }}
+                          disabled={eliminandoMision === m.id}
+                          className="w-full text-xs font-medium py-2 rounded-lg disabled:opacity-60"
+                          style={{ border: '1px solid #F5C6C6', color: '#A32D2D', backgroundColor: '#FCEBEB' }}
+                        >
+                          {eliminandoMision === m.id ? 'Eliminando...' : 'Eliminar misión'}
+                        </button>
                       )}
                     </div>
                   )}

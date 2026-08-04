@@ -11,6 +11,7 @@ export default function AprobarUsuarios() {
   const [pendientes, setPendientes] = useState([])
   const [cargando, setCargando] = useState(true)
   const [aprobandoId, setAprobandoId] = useState(null)
+  const [rechazandoId, setRechazandoId] = useState(null)
 
   const cargar = async () => {
     setCargando(true)
@@ -33,6 +34,23 @@ export default function AprobarUsuarios() {
     await supabase.from('profiles').update({ active: true }).eq('id', id)
     setPendientes((prev) => prev.filter((p) => p.id !== id))
     setAprobandoId(null)
+  }
+
+  const rechazar = async (id, nombre) => {
+    const ok = window.confirm(
+      `¿Rechazar la solicitud de ${nombre || 'este usuario'}? Esta acción no se puede deshacer — si la persona necesita acceso más adelante, tendrá que registrarse de nuevo.`
+    )
+    if (!ok) return
+
+    setRechazandoId(id)
+    const { error } = await supabase.from('profiles').delete().eq('id', id)
+    setRechazandoId(null)
+
+    if (error) {
+      alert('No se pudo rechazar la solicitud: ' + error.message)
+      return
+    }
+    setPendientes((prev) => prev.filter((p) => p.id !== id))
   }
 
   return (
@@ -68,13 +86,22 @@ export default function AprobarUsuarios() {
             <p className="text-xs text-brand-600 font-medium mt-1">
               {ROL_LABEL[p.rol] || p.rol}
             </p>
-            <button
-              onClick={() => aprobar(p.id)}
-              disabled={aprobandoId === p.id}
-              className="mt-3 w-full rounded-xl bg-brand-600 text-white text-sm font-medium py-2 active:scale-[0.98] transition disabled:opacity-60"
-            >
-              {aprobandoId === p.id ? 'Aprobando...' : 'Aprobar acceso'}
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => rechazar(p.id, p.full_name)}
+                disabled={aprobandoId === p.id || rechazandoId === p.id}
+                className="flex-1 rounded-xl bg-white border border-red-200 text-red-600 text-sm font-medium py-2 active:scale-[0.98] transition disabled:opacity-60"
+              >
+                {rechazandoId === p.id ? 'Rechazando...' : 'Rechazar'}
+              </button>
+              <button
+                onClick={() => aprobar(p.id)}
+                disabled={aprobandoId === p.id || rechazandoId === p.id}
+                className="flex-1 rounded-xl bg-brand-600 text-white text-sm font-medium py-2 active:scale-[0.98] transition disabled:opacity-60"
+              >
+                {aprobandoId === p.id ? 'Aprobando...' : 'Aprobar acceso'}
+              </button>
+            </div>
           </div>
         ))}
       </main>

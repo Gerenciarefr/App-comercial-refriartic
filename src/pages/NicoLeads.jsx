@@ -211,7 +211,14 @@ export default function NicoLeads() {
     } else if (filtroAsesor) {
       query = query.eq('asesor_id', filtroAsesor)
     }
-    if (filtroEstado) query = query.eq('estado', filtroEstado)
+    // Los leads en "Venta Hecha" ya viven como clientes — se ocultan del
+    // listado por defecto para no duplicar información. Si el director
+    // filtra explícitamente por ese estado, sí se muestran (para auditoría).
+    if (filtroEstado) {
+      query = query.eq('estado', filtroEstado)
+    } else {
+      query = query.neq('estado', 'venta_hecha')
+    }
     if (filtroOrigen) query = query.eq('origen', filtroOrigen)
     if (fechaDesde) query = query.gte('created_at', `${fechaDesde}T00:00:00`)
     if (fechaHasta) query = query.lte('created_at', `${fechaHasta}T23:59:59`)

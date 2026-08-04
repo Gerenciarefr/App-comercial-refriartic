@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { rangoSemana } from '../lib/fechas'
 import AvanceMetasPersonal from '../components/AvanceMetasPersonal'
@@ -126,6 +126,8 @@ const inputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimary }
 
 export default function AsesorDetalle() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const [eliminando, setEliminando] = useState(false)
   const [offsetSemana, setOffsetSemana] = useState(0)
   const [asesor, setAsesor] = useState(null)
   const [stats, setStats] = useState(null)
@@ -413,6 +415,42 @@ export default function AsesorDetalle() {
     }
   }
 
+  // Antes de eliminar, se verifica que el asesor no tenga leads ni clientes
+  // asignados — si los tiene, hay que reasignarlos primero (desde el listado
+  // de Leads / Clientes) para no dejar esos registros huérfanos.
+  const eliminarAsesor = async () => {
+    const nombreAsesor = asesor?.full_name || asesor?.nombre || 'este asesor'
+
+    const [{ count: leadsCount }, { count: clientesCount }] = await Promise.all([
+      supabase.from('leads').select('id', { count: 'exact', head: true }).eq('asesor_id', id),
+      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('asesor_id', id),
+    ])
+
+    if ((leadsCount || 0) > 0 || (clientesCount || 0) > 0) {
+      alert(
+        `No se puede eliminar a ${nombreAsesor}: todavía tiene ${leadsCount || 0} lead(s) y ${clientesCount || 0} cliente(s) asignados. Reasígnalos primero desde Leads / Clientes e inténtalo de nuevo.`
+      )
+      return
+    }
+
+    const primeraConfirmacion = window.confirm(`¿Eliminar a ${nombreAsesor}? Esta acción no se puede deshacer.`)
+    if (!primeraConfirmacion) return
+
+    const segundaConfirmacion = window.confirm('Confirma una vez más que quieres eliminar a este asesor.')
+    if (!segundaConfirmacion) return
+
+    setEliminando(true)
+    const { error } = await supabase.from('profiles').delete().eq('id', id)
+    setEliminando(false)
+
+    if (error) {
+      alert('No se pudo eliminar al asesor: ' + error.message)
+      return
+    }
+
+    navigate('/asesores', { replace: true })
+  }
+
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: C.bg }}>
       <header className="px-5 pt-8 pb-6 rounded-b-3xl" style={{ backgroundColor: C.navy }}>
@@ -669,6 +707,19 @@ export default function AsesorDetalle() {
                 </div>
               )}
             </section>
+
+            {!editando && (
+              <section>
+                <button
+                  onClick={eliminarAsesor}
+                  disabled={eliminando}
+                  className="w-full text-sm font-medium px-4 py-2.5 rounded-xl disabled:opacity-60"
+                  style={{ border: '1px solid #F5C6C6', color: '#A32D2D', backgroundColor: '#FCEBEB' }}
+                >
+                  {eliminando ? 'Eliminando...' : 'Eliminar asesor'}
+                </button>
+              </section>
+            )}
           </>
         )}
       </main>

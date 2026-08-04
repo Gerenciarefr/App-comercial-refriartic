@@ -164,6 +164,7 @@ export default function NicoLeadDetalle() {
 
   const [nuevoEstado, setNuevoEstado] = useState('')
   const [motivoPerdida, setMotivoPerdida] = useState('')
+  const [eliminando, setEliminando] = useState(false)
 
   const cargarTodo = useCallback(async () => {
     setLoading(true)
@@ -327,6 +328,50 @@ export default function NicoLeadDetalle() {
       setMotivoPerdida('')
       cargarTodo()
     }
+  }
+
+  // Solo el director puede eliminar leads, y solo si no están en "Venta
+  // Hecha" (esos ya son la fuente de un cliente real y no se deben borrar).
+  // Se limpian primero las tablas que referencian este lead para evitar
+  // errores de integridad referencial al borrar el lead en sí.
+  const eliminarLead = async () => {
+    if (lead.estado === 'venta_hecha') {
+      alert('Este lead ya está marcado como "Venta Hecha" y generó un cliente — no se puede eliminar.')
+      return
+    }
+
+    const primeraConfirmacion = window.confirm(
+      `¿Eliminar el lead de "${lead.empresa || lead.nombre_contacto}"? Esta acción no se puede deshacer.`
+    )
+    if (!primeraConfirmacion) return
+
+    const segundaConfirmacion = window.confirm(
+      'Confirma una vez más: se borrará todo el historial y las misiones asociadas a este lead. ¿Continuar?'
+    )
+    if (!segundaConfirmacion) return
+
+    setEliminando(true)
+
+    const { error: eHist } = await supabase.from('lead_stage_history').delete().eq('lead_id', id)
+    const { error: eAuto } = await supabase.from('automated_tasks').delete().eq('lead_id', id)
+    const { error: eManual } = await supabase.from('manual_tasks').delete().eq('lead_id', id)
+
+    const errorLimpieza = eHist || eAuto || eManual
+    if (errorLimpieza) {
+      setEliminando(false)
+      alert('No se pudo eliminar el lead: ' + errorLimpieza.message)
+      return
+    }
+
+    const { error } = await supabase.from('leads').delete().eq('id', id)
+    setEliminando(false)
+
+    if (error) {
+      alert('No se pudo eliminar el lead: ' + error.message)
+      return
+    }
+
+    navigate('/leads', { replace: true })
   }
 
   const marcarCumplida = async (mision) => {
@@ -625,6 +670,17 @@ export default function NicoLeadDetalle() {
             {guardandoForm ? 'Guardando...' : 'Guardar cambios y estado'}
           </button>
         </form>
+
+        {esDirector && (
+          <button
+            onClick={eliminarLead}
+            disabled={eliminando}
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-xl mb-4 disabled:opacity-60"
+            style={{ border: '1px solid #F5C6C6', color: '#A32D2D', backgroundColor: '#FCEBEB' }}
+          >
+            {eliminando ? 'Eliminando...' : 'Eliminar lead'}
+          </button>
+        )}
 
         {/* Misiones pendientes */}
         <div className="mb-4">
