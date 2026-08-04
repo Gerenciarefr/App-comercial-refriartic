@@ -391,7 +391,7 @@ export default function HojaDeRuta() {
         .lte('fecha_programada', finStr),
       supabase
         .from('leads')
-        .select('id, asesor_id, empresa, nombre_contacto, origen, created_at')
+        .select('id, asesor_id, empresa, nombre_contacto, origen, created_at, completado_at')
         .in('asesor_id', asesoresVisibles)
         .in('origen', ['prospeccion_asesor'])
         .gte('created_at', inicioStr)
@@ -488,7 +488,7 @@ export default function HojaDeRuta() {
         cliente: l.nombre_contacto || null,
         empresa: l.empresa || null,
         hora: null,
-        cumplida: false,
+        cumplida: !!l.completado_at,
         asesor_id: l.asesor_id,
         lead_id: l.id,
         client_id: null,
@@ -795,8 +795,10 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
 
     let contacto = null
     let estadoLead = null
-    let tareaCompletable =
-      mision.origenTarea === 'lead' ? null : { tabla: mision.tabla, id: mision.idOriginal, cumplida: mision.cumplida }
+    // "Prospección de asesor" ahora se completa marcando directamente el
+    // lead (columna leads.completado_at) — igual que las misiones auto/
+    // manuales se completan marcando su propia fila.
+    let tareaCompletable = { tabla: mision.tabla, id: mision.idOriginal, cumplida: mision.cumplida }
 
     if (mision.lead_id) {
       const { data: lead } = await supabase
@@ -807,18 +809,6 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
       if (lead) {
         contacto = { telefono: lead.telefono, nombre: lead.nombre_contacto, empresa: lead.empresa }
         estadoLead = lead.estado
-      }
-      if (mision.origenTarea === 'lead') {
-        const { data: tarea } = await supabase
-          .from('automated_tasks')
-          .select('id, completado_at')
-          .eq('lead_id', mision.lead_id)
-          .in('tipo', TIPOS_SEGUIMIENTO_LEAD)
-          .is('completado_at', null)
-          .order('fecha_programada', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-        if (tarea) tareaCompletable = { tabla: 'automated_tasks', id: tarea.id, cumplida: false }
       }
     } else if (mision.client_id) {
       const { data: cliente } = await supabase
@@ -1092,16 +1082,6 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                             </button>
                           </div>
                         )
-                      )}
-
-                      {/* Prospección de asesor: si ya no queda ninguna tarea de
-                          seguimiento pendiente para este lead, no hay nada que
-                          marcar aquí — se avisa en vez de dejar la tarjeta sin
-                          botón, que parece un error. */}
-                      {!datos?.cargando && !datos?.tareaCompletable && m.origenTarea === 'lead' && (
-                        <p className="text-xs font-medium text-center py-2" style={{ color: '#0F6E56' }}>
-                          Sin seguimiento pendiente para este lead por ahora
-                        </p>
                       )}
 
                       {/* Eliminar misión: solo el director, y solo para
