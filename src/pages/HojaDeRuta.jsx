@@ -385,7 +385,7 @@ export default function HojaDeRuta() {
         .lte('fecha_programada', finStr),
       supabase
         .from('manual_tasks')
-        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita')
+        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita, mostrar_en_entregas')
         .in('asesor_id', asesoresVisibles)
         .gte('fecha_programada', inicioStr)
         .lte('fecha_programada', finStr),
@@ -474,6 +474,7 @@ export default function HojaDeRuta() {
         client_id: t.client_id,
         tabla: 'manual_tasks',
         idOriginal: t.id,
+        mostrarEnEntregas: !!t.mostrar_en_entregas,
       })
     })
     ;(leadsRes.data || []).forEach((l) => {
@@ -856,6 +857,21 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
     onClose()
   }
 
+  const [actualizandoEntregas, setActualizandoEntregas] = useState(null)
+
+  const toggleMostrarEnEntregas = async (mision) => {
+    const nuevoValor = !mision.mostrarEnEntregas
+    setActualizandoEntregas(mision.id)
+    const { error } = await supabase.from('manual_tasks').update({ mostrar_en_entregas: nuevoValor }).eq('id', mision.idOriginal)
+    setActualizandoEntregas(null)
+
+    if (error) {
+      alert('No se pudo actualizar: ' + error.message)
+      return
+    }
+    onReprogramada?.()
+  }
+
   const completarTarea = async (misionId, tarea) => {
     const ahora = tarea.cumplida ? null : new Date().toISOString()
     const { error } = await supabase.from(tarea.tabla).update({ completado_at: ahora }).eq('id', tarea.id)
@@ -1082,6 +1098,26 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                             </button>
                           </div>
                         )
+                      )}
+
+                      {/* Mostrar/ocultar en Entregas programadas: disponible en
+                          cualquier misión manual, se puede cambiar aunque la
+                          misión ya esté creada. */}
+                      {m.tabla === 'manual_tasks' && (
+                        <label
+                          className="flex items-center gap-2 text-xs py-1 cursor-pointer"
+                          style={{ color: C.textSecondary }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!m.mostrarEnEntregas}
+                            disabled={actualizandoEntregas === m.id}
+                            onChange={() => toggleMostrarEnEntregas(m)}
+                            className="rounded border-gray-300"
+                          />
+                          Mostrar en "Entregas programadas"
+                        </label>
                       )}
 
                       {/* Eliminar misión: solo el director, y solo para
