@@ -67,6 +67,14 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
       .gte('fecha_programada', inicioStr)
       .lte('fecha_programada', finStr)
 
+    const { data: entregasManuales } = await supabase
+      .from('manual_tasks')
+      .select('id, asesor_id, titulo, lead_id, client_id, fecha_programada, lugar, completado_at')
+      .eq('mostrar_en_entregas', true)
+      .in('asesor_id', asesoresVisibles)
+      .gte('fecha_programada', inicioStr)
+      .lte('fecha_programada', finStr)
+
     const opIds = [...new Set((entregas || []).map((e) => e.op_id).filter(Boolean))]
 
     const [{ data: pedidos }, { data: opsPedido }] = await Promise.all([
@@ -79,13 +87,21 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
     ])
 
     const pedidosMap = Object.fromEntries((pedidos || []).map((p) => [p.id, p]))
-    const clientIds = [...new Set((pedidos || []).map((p) => p.client_id).filter(Boolean))]
+    const clientIds = new Set((pedidos || []).map((p) => p.client_id).filter(Boolean))
+    const leadIdsManual = [...new Set((entregasManuales || []).map((t) => t.lead_id).filter(Boolean))]
+    const clientIdsManual = (entregasManuales || []).map((t) => t.client_id).filter(Boolean)
+    clientIdsManual.forEach((id) => clientIds.add(id))
 
-    const { data: clientes } =
-      clientIds.length > 0
-        ? await supabase.from('clients').select('id, empresa, nombre_contacto').in('id', clientIds)
-        : { data: [] }
+    const [{ data: clientes }, { data: leadsManual }] = await Promise.all([
+      clientIds.size > 0
+        ? supabase.from('clients').select('id, empresa, nombre_contacto').in('id', [...clientIds])
+        : Promise.resolve({ data: [] }),
+      leadIdsManual.length > 0
+        ? supabase.from('leads').select('id, empresa, nombre_contacto').in('id', leadIdsManual)
+        : Promise.resolve({ data: [] }),
+    ])
     const clientesMap = Object.fromEntries((clientes || []).map((c) => [c.id, c]))
+    const leadsManualMap = Object.fromEntries((leadsManual || []).map((l) => [l.id, l]))
 
     const opsPorPedido = {}
     ;(opsPedido || []).forEach((o) => {
@@ -100,7 +116,7 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
       const clave = e.fecha_programada
       porDia[clave] = porDia[clave] || []
       porDia[clave].push({
-        id: e.id,
+        id: `auto-${e.id}`,
         cumplida: !!e.completado_at,
         iniciales: iniciales(nombreAsesorId(e.asesor_id)),
         nombreAsesor: nombreAsesorId(e.asesor_id),
@@ -108,6 +124,25 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
         numeroPedido: pedido?.numero_pedido || '—',
         ubicacion: pedido?.ubicacion_entrega || null,
         ops: pedido ? opsPorPedido[pedido.id] || [] : [],
+      })
+    })
+
+    // Misiones manuales marcadas para aparecer aquí — mismo formato de
+    // tarjeta, pero sin número de pedido (se muestra el título en su lugar).
+    ;(entregasManuales || []).forEach((t) => {
+      const contacto = t.client_id ? clientesMap[t.client_id] : t.lead_id ? leadsManualMap[t.lead_id] : null
+      const clave = t.fecha_programada
+      porDia[clave] = porDia[clave] || []
+      porDia[clave].push({
+        id: `manual-${t.id}`,
+        cumplida: !!t.completado_at,
+        iniciales: iniciales(nombreAsesorId(t.asesor_id)),
+        nombreAsesor: nombreAsesorId(t.asesor_id),
+        cliente: contacto?.empresa || contacto?.nombre_contacto || t.titulo,
+        numeroPedido: null,
+        titulo: t.titulo,
+        ubicacion: t.lugar || null,
+        ops: [],
       })
     })
 
@@ -187,7 +222,7 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
                           </span>
                           <span className="font-semibold text-slate-800 truncate">{e.cliente}</span>
                         </div>
-                        <p className="text-slate-500">Pedido: {e.numeroPedido}</p>
+                        <p className="text-slate-500">{e.numeroPedido != null ? `Pedido: ${e.numeroPedido}` : e.titulo}</p>
                         {e.ubicacion && <p className="text-slate-500 truncate">📍 {e.ubicacion}</p>}
                         {e.ops.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
