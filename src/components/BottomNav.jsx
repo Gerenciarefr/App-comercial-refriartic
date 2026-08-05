@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
+import { useModoApoyoLocal } from '../lib/modoApoyoLocal'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -110,6 +111,7 @@ const itemsModoApoyo = [{ to: '/leads', label: 'Leads', Icon: IconList }]
 
 export default function BottomNav({ esDirector, modoApoyo }) {
   const { refrescarPerfil } = useAuth()
+  const [, setModoApoyoLocal] = useModoApoyoLocal()
   const [mostrarPin, setMostrarPin] = useState(false)
   const [pin, setPin] = useState('')
   const [error, setError] = useState(null)
@@ -152,25 +154,10 @@ export default function BottomNav({ esDirector, modoApoyo }) {
       return
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    const { error: errUpdate } = await supabase
-      .from('profiles')
-      .update({ modo_apoyo_activo: false })
-      .eq('id', user.id)
-
+    setModoApoyoLocal(false)
     setVerificando(false)
-
-    if (errUpdate) {
-      setError('No se pudo desactivar: ' + errUpdate.message)
-      return
-    }
-
     setMostrarPin(false)
     setPin('')
-    await refrescarPerfil()
   }
 
   return (

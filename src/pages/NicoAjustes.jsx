@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
+import { useModoApoyoLocal } from '../lib/modoApoyoLocal'
 import ProyeccionMetas from '../components/ProyeccionMetas'
 import MensajesPredeterminados from '../components/MensajesPredeterminados'
 
@@ -81,6 +82,7 @@ const inputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimary }
 
 export default function NicoAjustes() {
   const { profile, refrescarPerfil } = useAuth()
+  const [, setModoApoyoLocal] = useModoApoyoLocal()
   const [tabActiva, setTabActiva] = useState('general')
 
   const [ivaPorcentaje, setIvaPorcentaje] = useState('')
@@ -174,23 +176,13 @@ export default function NicoAjustes() {
     }
 
     const ok = window.confirm(
-      'Al activar el Modo Apoyo, tu sesión quedará restringida solo al módulo de Leads hasta que ingreses el PIN para salir. ¿Continuar?'
+      'Al activar el Modo Apoyo, esta pantalla quedará restringida solo al módulo de Leads hasta que ingreses el PIN para salir. Tus otras sesiones (celular, otro computador) no se ven afectadas. ¿Continuar?'
     )
     if (!ok) return
 
     setActivandoModoApoyo(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ modo_apoyo_activo: true })
-      .eq('id', profile?.id)
+    setModoApoyoLocal(true)
     setActivandoModoApoyo(false)
-
-    if (error) {
-      setPinMsg({ tipo: 'error', texto: error.message })
-      return
-    }
-
-    await refrescarPerfil()
   }
 
   const agregarDiaPicoPlaca = async () => {

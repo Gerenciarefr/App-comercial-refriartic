@@ -8,6 +8,7 @@ import CompletarPerfil from './pages/CompletarPerfil'
 import AprobarUsuarios from './pages/AprobarUsuarios'
 import BottomNav from './components/BottomNav'
 import { useAuth } from './lib/AuthContext'
+import { useModoApoyoLocal } from './lib/modoApoyoLocal'
 import NicoLeads from './pages/NicoLeads'
 import NicoLeadDetalle from './pages/NicoLeadDetalle'
 import NicoClientes from './pages/NicoClientes'
@@ -52,8 +53,11 @@ function AreaProtegida() {
   const { profile } = useAuth()
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
   // Modo Apoyo: solo aplica al director (ej. para dárselo temporalmente a la
-  // secretaria). Mientras está activo, solo puede usar el módulo de Leads.
-  const modoApoyo = esDirector && !!profile?.modo_apoyo_activo
+  // secretaria). Vive en este dispositivo/navegador, no en la cuenta — así
+  // activarlo aquí no afecta la sesión del director en otra pantalla.
+  // Mientras está activo, solo puede usar el módulo de Leads.
+  const [modoApoyoLocal] = useModoApoyoLocal()
+  const modoApoyo = esDirector && modoApoyoLocal
 
   if (!profile?.active) return <Pendiente />
   if (!profile.perfil_completo) return <CompletarPerfil />
