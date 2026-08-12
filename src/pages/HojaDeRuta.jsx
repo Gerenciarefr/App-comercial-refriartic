@@ -266,6 +266,14 @@ const IconBan = (props) => (
     <line x1="5.5" y1="5.5" x2="18.5" y2="18.5" />
   </IconBase>
 )
+const IconCalendar = (props) => (
+  <IconBase {...props}>
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </IconBase>
+)
 
 // Íconos por grupo, usados en los círculos de la línea de tiempo del día.
 function IconGrupo({ grupo, size = 15, ...props }) {
@@ -385,7 +393,7 @@ export default function HojaDeRuta() {
         .lte('fecha_programada', finStr),
       supabase
         .from('manual_tasks')
-        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita, mostrar_en_entregas')
+        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita')
         .in('asesor_id', asesoresVisibles)
         .gte('fecha_programada', inicioStr)
         .lte('fecha_programada', finStr),
@@ -474,7 +482,6 @@ export default function HojaDeRuta() {
         client_id: t.client_id,
         tabla: 'manual_tasks',
         idOriginal: t.id,
-        mostrarEnEntregas: !!t.mostrar_en_entregas,
       })
     })
     ;(leadsRes.data || []).forEach((l) => {
@@ -722,6 +729,7 @@ export default function HojaDeRuta() {
           fecha={diaSeleccionado}
           misiones={misionesDelDia(diaSeleccionado)}
           esDirector={esDirector}
+          profile={profile}
           nombreAsesorId={nombreAsesorId}
           onClose={() => setDiaSeleccionado(null)}
           onToggleCumplida={toggleCumplida}
@@ -733,13 +741,23 @@ export default function HojaDeRuta() {
   )
 }
 
-function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose, onToggleCumplida, onReprogramada, onMisionEliminada }) {
+function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId, onClose, onToggleCumplida, onReprogramada, onMisionEliminada }) {
   const [expandidoId, setExpandidoId] = useState(null)
   const [extra, setExtra] = useState({}) // { [misionId]: { telefono, nombreContacto, estadoLead, tareaCompletable, cargando } }
   const [mensajes, setMensajes] = useState([])
   const [copiadoId, setCopiadoId] = useState(null)
   const [reprogramando, setReprogramando] = useState(null)
   const [eliminandoMision, setEliminandoMision] = useState(null)
+
+  // Estado "venta perdida" pendiente de motivo — reemplaza al viejo
+  // window.prompt(), que no funciona en la PWA instalada (iOS/Android lo
+  // bloquean o lo ignoran silenciosamente). Mientras el motivo no se
+  // confirme, el cambio de estado no se guarda en la base de datos.
+  const [motivoPendiente, setMotivoPendiente] = useState({}) // { [misionId]: { estadoAnterior, texto } }
+  const [guardandoMotivo, setGuardandoMotivo] = useState(null)
+
+  // Fecha propuesta al reprogramar una misión manual desde su tarjeta.
+  const [fechaReprogramar, setFechaReprogramar] = useState({}) // { [misionId]: 'YYYY-MM-DD' }
 
   const esteDiaEsDomingo = esDomingo(aYMD(fecha))
 
@@ -757,6 +775,27 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
     onReprogramada?.()
     onClose()
   }
+
+  // Reprogramar una misión manual a cualquier otra fecha, desde su propia
+  // tarjeta en la Hoja de Ruta. Disponible para el asesor asignado y el
+  // director (mismo criterio que "marcar cumplida").
+  const reprogramarManual = async (mision, nuevaFechaStr) => {
+    if (!nuevaFechaStr) return
+    setReprogramando(mision.id)
+    const { error } = await supabase
+      .from('manual_tasks')
+      .update({ fecha_programada: nuevaFechaStr })
+      .eq('id', mision.idOriginal)
+    setReprogramando(null)
+    if (error) {
+      alert('No se pudo reprogramar la misión: ' + error.message)
+      return
+    }
+    onReprogramada?.()
+    onClose()
+  }
+
+  const puedeReprogramar = (mision) => esDirector || mision.asesor_id === profile?.id
 
   useEffect(() => {
     supabase
@@ -804,11 +843,11 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
     if (mision.lead_id) {
       const { data: lead } = await supabase
         .from('leads')
-        .select('telefono, nombre_contacto, empresa, estado')
+        .select('telefono, telefono_2, nombre_contacto, empresa, estado')
         .eq('id', mision.lead_id)
         .single()
       if (lead) {
-        contacto = { telefono: lead.telefono, nombre: lead.nombre_contacto, empresa: lead.empresa }
+        contacto = { telefono: lead.telefono, telefono_2: lead.telefono_2, nombre: lead.nombre_contacto, empresa: lead.empresa }
         estadoLead = lead.estado
       }
     } else if (mision.client_id) {
@@ -828,15 +867,49 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
 
   const cambiarEstadoLead = async (misionId, leadId, nuevoEstado) => {
     if (nuevoEstado === 'venta_perdida') {
-      const motivo = prompt('Motivo de la venta perdida (obligatorio):')
-      if (!motivo || !motivo.trim()) return
-      const { error } = await supabase.from('leads').update({ estado: nuevoEstado, motivo_perdida: motivo.trim() }).eq('id', leadId)
-      if (error) return alert('No se pudo actualizar: ' + error.message)
-    } else {
-      const { error } = await supabase.from('leads').update({ estado: nuevoEstado }).eq('id', leadId)
-      if (error) return alert('No se pudo actualizar: ' + error.message)
+      // No se guarda todavía: se muestra un campo en pantalla para escribir
+      // el motivo (obligatorio) y se confirma con el botón "Guardar motivo".
+      const estadoAnterior = extra[misionId]?.estadoLead
+      setMotivoPendiente((prev) => ({ ...prev, [misionId]: { estadoAnterior, texto: '' } }))
+      setExtra((prev) => ({ ...prev, [misionId]: { ...prev[misionId], estadoLead: nuevoEstado } }))
+      return
     }
+    const { error } = await supabase.from('leads').update({ estado: nuevoEstado }).eq('id', leadId)
+    if (error) return alert('No se pudo actualizar: ' + error.message)
     setExtra((prev) => ({ ...prev, [misionId]: { ...prev[misionId], estadoLead: nuevoEstado } }))
+  }
+
+  const cancelarMotivoPendiente = (misionId) => {
+    const pendiente = motivoPendiente[misionId]
+    setExtra((prev) => ({ ...prev, [misionId]: { ...prev[misionId], estadoLead: pendiente?.estadoAnterior ?? prev[misionId]?.estadoLead } }))
+    setMotivoPendiente((prev) => {
+      const siguiente = { ...prev }
+      delete siguiente[misionId]
+      return siguiente
+    })
+  }
+
+  const guardarMotivoPerdida = async (misionId, leadId) => {
+    const texto = (motivoPendiente[misionId]?.texto || '').trim()
+    if (!texto) {
+      alert('El motivo de la venta perdida es obligatorio.')
+      return
+    }
+    setGuardandoMotivo(misionId)
+    const { error } = await supabase
+      .from('leads')
+      .update({ estado: 'venta_perdida', motivo_perdida: texto })
+      .eq('id', leadId)
+    setGuardandoMotivo(null)
+    if (error) {
+      alert('No se pudo actualizar: ' + error.message)
+      return
+    }
+    setMotivoPendiente((prev) => {
+      const siguiente = { ...prev }
+      delete siguiente[misionId]
+      return siguiente
+    })
   }
 
   // Solo se pueden eliminar misiones creadas manualmente (tabla manual_tasks)
@@ -855,21 +928,6 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
     }
     onMisionEliminada?.()
     onClose()
-  }
-
-  const [actualizandoEntregas, setActualizandoEntregas] = useState(null)
-
-  const toggleMostrarEnEntregas = async (mision) => {
-    const nuevoValor = !mision.mostrarEnEntregas
-    setActualizandoEntregas(mision.id)
-    const { error } = await supabase.from('manual_tasks').update({ mostrar_en_entregas: nuevoValor }).eq('id', mision.idOriginal)
-    setActualizandoEntregas(null)
-
-    if (error) {
-      alert('No se pudo actualizar: ' + error.message)
-      return
-    }
-    onReprogramada?.()
   }
 
   const completarTarea = async (misionId, tarea) => {
@@ -913,6 +971,7 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
             const simple = esMisionSimple(m)
             const urgente = esMisionUrgente(m) && !m.cumplida
             const esUltimo = idx === ordenadas.length - 1
+            const pendienteMotivo = motivoPendiente[m.id]
 
             return (
               <div key={m.id} className="relative flex gap-3" style={{ paddingBottom: esUltimo ? 0 : 20 }}>
@@ -983,6 +1042,49 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                             ))}
                             {datos.estadoLead === 'venta_hecha' && <option value="venta_hecha">Venta hecha</option>}
                           </select>
+
+                          {/* Motivo de venta perdida — reemplaza el viejo prompt() nativo,
+                              que no funciona en la PWA instalada. El estado no se guarda
+                              hasta confirmar el motivo. */}
+                          {pendienteMotivo && (
+                            <div
+                              className="mt-2 rounded-lg p-2.5 space-y-2"
+                              style={{ backgroundColor: '#FCEBEB', border: '0.5px solid #F5C6C6' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <p className="text-[11px] font-medium" style={{ color: '#A32D2D' }}>
+                                Motivo de la venta perdida (obligatorio)
+                              </p>
+                              <textarea
+                                autoFocus
+                                value={pendienteMotivo.texto}
+                                onChange={(e) =>
+                                  setMotivoPendiente((prev) => ({ ...prev, [m.id]: { ...prev[m.id], texto: e.target.value } }))
+                                }
+                                rows={2}
+                                className="w-full rounded-lg px-2 py-1.5 text-xs bg-white"
+                                style={{ border: '0.5px solid #F5C6C6', color: C.textPrimary }}
+                                placeholder="Ej: precio, se fue con la competencia, ya no lo necesita..."
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => cancelarMotivoPendiente(m.id)}
+                                  className="flex-1 text-[11px] font-medium py-1.5 rounded-lg"
+                                  style={{ backgroundColor: '#FFFFFF', color: C.textSecondary, border: `0.5px solid ${C.border}` }}
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  onClick={() => guardarMotivoPerdida(m.id, datos.leadId)}
+                                  disabled={guardandoMotivo === m.id}
+                                  className="flex-1 text-[11px] font-medium py-1.5 rounded-lg disabled:opacity-60"
+                                  style={{ backgroundColor: '#A32D2D', color: '#FFFFFF' }}
+                                >
+                                  {guardandoMotivo === m.id ? 'Guardando...' : 'Guardar motivo'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1049,6 +1151,34 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                         </div>
                       )}
 
+                      {/* Reprogramar misión manual a otra fecha — visible para el
+                          asesor asignado y para el director. */}
+                      {!datos?.cargando && m.tabla === 'manual_tasks' && puedeReprogramar(m) && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <label className="text-[11px] flex items-center gap-1 mb-1" style={{ color: C.textSecondary }}>
+                            <IconCalendar size={11} />
+                            Cambiar fecha de esta misión
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="date"
+                              value={fechaReprogramar[m.id] ?? aYMD(fecha)}
+                              onChange={(e) => setFechaReprogramar((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                              className="flex-1 rounded-lg px-2 py-1.5 text-xs bg-white"
+                              style={{ border: `0.5px solid ${C.border}`, color: C.textPrimary }}
+                            />
+                            <button
+                              disabled={reprogramando === m.id}
+                              onClick={() => reprogramarManual(m, fechaReprogramar[m.id] || aYMD(fecha))}
+                              className="text-[11px] font-medium px-3 py-1.5 rounded-lg disabled:opacity-60"
+                              style={{ backgroundColor: C.navy, color: '#FFFFFF' }}
+                            >
+                              {reprogramando === m.id ? 'Moviendo...' : 'Mover'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Botones inferiores: simples = solo completada (ancho completo);
                           completas = WhatsApp + Completada, 50/50 */}
                       {!datos?.cargando && datos?.tareaCompletable && (
@@ -1082,6 +1212,19 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                                 WhatsApp
                               </a>
                             )}
+                            {datos?.contacto?.telefono_2 && waLink(datos.contacto.telefono_2) && (
+                              <a
+                                href={waLink(datos.contacto.telefono_2)}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex-1 text-center rounded-lg text-xs font-medium py-2 flex items-center justify-center gap-1"
+                                style={{ backgroundColor: '#0F6E56', color: '#FFFFFF' }}
+                              >
+                                <IconMessage size={12} />
+                                WhatsApp 2
+                              </a>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -1098,26 +1241,6 @@ function DiaDetalleModal({ fecha, misiones, esDirector, nombreAsesorId, onClose,
                             </button>
                           </div>
                         )
-                      )}
-
-                      {/* Mostrar/ocultar en Entregas programadas: disponible en
-                          cualquier misión manual, se puede cambiar aunque la
-                          misión ya esté creada. */}
-                      {m.tabla === 'manual_tasks' && (
-                        <label
-                          className="flex items-center gap-2 text-xs py-1 cursor-pointer"
-                          style={{ color: C.textSecondary }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!!m.mostrarEnEntregas}
-                            disabled={actualizandoEntregas === m.id}
-                            onChange={() => toggleMostrarEnEntregas(m)}
-                            className="rounded border-gray-300"
-                          />
-                          Mostrar en "Entregas programadas"
-                        </label>
                       )}
 
                       {/* Eliminar misión: solo el director, y solo para

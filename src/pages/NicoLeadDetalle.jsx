@@ -74,6 +74,7 @@ const CAMPOS_VACIOS = {
   empresa: '',
   nombre_contacto: '',
   telefono: '',
+  telefono_2: '',
   email: '',
   ciudad: '',
   notas_diagnostico: '',
@@ -141,6 +142,13 @@ const IconMapPin = (props) => (
     <circle cx="12" cy="10" r="3" />
   </IconBase>
 )
+const IconAlertTriangle = (props) => (
+  <IconBase {...props}>
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </IconBase>
+)
 
 const inputCls = 'w-full rounded-xl px-3 py-2 text-sm bg-white focus:outline-none'
 const inputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimary }
@@ -189,6 +197,7 @@ export default function NicoLeadDetalle() {
       empresa: leadRes.data.empresa || '',
       nombre_contacto: leadRes.data.nombre_contacto || '',
       telefono: leadRes.data.telefono || '',
+      telefono_2: leadRes.data.telefono_2 || '',
       email: leadRes.data.email || '',
       ciudad: leadRes.data.ciudad || '',
       notas_diagnostico: leadRes.data.notas_diagnostico || '',
@@ -251,7 +260,7 @@ export default function NicoLeadDetalle() {
     e.preventDefault()
     setFormMsg(null)
 
-    if (nuevoEstado === 'venta_perdida' && !motivoPerdida.trim()) {
+    if (nuevoEstado === 'venta_perdida' && !motivoPerdida.trim() && !(lead?.estado === 'venta_perdida' && lead?.motivo_perdida)) {
       setFormMsg({ tipo: 'error', texto: 'El motivo de pérdida es obligatorio para este estado.' })
       return
     }
@@ -302,6 +311,7 @@ export default function NicoLeadDetalle() {
       empresa: form.empresa.trim() || null,
       nombre_contacto: form.nombre_contacto.trim(),
       telefono: form.telefono.trim(),
+      telefono_2: form.telefono_2.trim() || null,
       email: form.email.trim() || null,
       ciudad: form.ciudad.trim() || null,
       notas_diagnostico: form.notas_diagnostico.trim() || null,
@@ -315,7 +325,11 @@ export default function NicoLeadDetalle() {
       estado: nuevoEstado,
     }
 
-    if (nuevoEstado === 'venta_perdida') payload.motivo_perdida = motivoPerdida.trim()
+    if (nuevoEstado === 'venta_perdida') {
+      // Si no escribieron uno nuevo pero el lead ya tenía motivo guardado
+      // (p. ej. solo estaban editando otro campo), se conserva el existente.
+      payload.motivo_perdida = motivoPerdida.trim() || lead?.motivo_perdida || null
+    }
 
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
 
@@ -407,6 +421,7 @@ export default function NicoLeadDetalle() {
 
   const info = estadoInfo(lead.estado)
   const link = waLink(lead.telefono)
+  const link2 = waLink(lead.telefono_2)
   const misionesPendientes = misiones.filter((m) => !m.completado_at)
   const misionesCumplidas = misiones.filter((m) => m.completado_at)
 
@@ -437,20 +452,49 @@ export default function NicoLeadDetalle() {
             </span>
           </div>
 
-          {link && (
-            <a
-              href={link}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2"
-              style={{ backgroundColor: 'rgba(29,158,117,0.18)' }}
-            >
-              <IconMessage size={14} style={{ color: '#5DCAA5' }} />
-              <span className="text-xs font-medium" style={{ color: '#5DCAA5' }}>
-                Escribir por WhatsApp — {lead.telefono}
-              </span>
-            </a>
+          {/* Motivo de venta perdida: se guarda al cambiar el estado (aquí o
+              desde la Hoja de Ruta) pero antes no se mostraba en ningún
+              lado — ahora queda visible justo debajo del estado. */}
+          {lead.estado === 'venta_perdida' && lead.motivo_perdida && (
+            <div className="mt-3 rounded-lg p-2.5 flex items-start gap-2" style={{ backgroundColor: 'rgba(163,45,45,0.18)' }}>
+              <IconAlertTriangle size={13} style={{ color: '#F5A3A3', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <p className="text-[11px] font-medium" style={{ color: '#F5A3A3' }}>Motivo de la venta perdida</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>{lead.motivo_perdida}</p>
+              </div>
+            </div>
           )}
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            {link && (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2"
+                style={{ backgroundColor: 'rgba(29,158,117,0.18)' }}
+              >
+                <IconMessage size={14} style={{ color: '#5DCAA5' }} />
+                <span className="text-xs font-medium" style={{ color: '#5DCAA5' }}>
+                  WhatsApp — {lead.telefono}
+                </span>
+              </a>
+            )}
+            {link2 && (
+              <a
+                href={link2}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2"
+                style={{ backgroundColor: 'rgba(29,158,117,0.18)' }}
+              >
+                <IconMessage size={14} style={{ color: '#5DCAA5' }} />
+                <span className="text-xs font-medium" style={{ color: '#5DCAA5' }}>
+                  WhatsApp 2 — {lead.telefono_2}
+                </span>
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Datos del lead y estado del embudo — un solo formulario, un solo botón */}
@@ -486,14 +530,25 @@ export default function NicoLeadDetalle() {
           </div>
 
           {nuevoEstado === 'venta_perdida' && (
-            <textarea
-              value={motivoPerdida}
-              onChange={(e) => setMotivoPerdida(e.target.value)}
-              placeholder="Motivo de la venta perdida (obligatorio)"
-              rows={2}
-              className={inputCls}
-              style={inputStyle}
-            />
+            <div>
+              <textarea
+                value={motivoPerdida}
+                onChange={(e) => setMotivoPerdida(e.target.value)}
+                placeholder={
+                  lead.motivo_perdida
+                    ? `Motivo actual: "${lead.motivo_perdida}" — escribe aquí solo si quieres reemplazarlo`
+                    : 'Motivo de la venta perdida (obligatorio)'
+                }
+                rows={2}
+                className={inputCls}
+                style={inputStyle}
+              />
+              {lead.motivo_perdida && !motivoPerdida.trim() && (
+                <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>
+                  Se conservará el motivo ya guardado si dejas esto vacío.
+                </p>
+              )}
+            </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -523,6 +578,16 @@ export default function NicoLeadDetalle() {
                 type="tel"
                 value={form.telefono}
                 onChange={(e) => cambiarForm('telefono', e.target.value)}
+                className={inputCls}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label className="text-xs" style={{ color: C.textSecondary }}>Teléfono alterno (opcional)</label>
+              <input
+                type="tel"
+                value={form.telefono_2}
+                onChange={(e) => cambiarForm('telefono_2', e.target.value)}
                 className={inputCls}
                 style={inputStyle}
               />

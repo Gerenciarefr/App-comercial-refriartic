@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 import { rangoSemana } from '../lib/fechas'
 import HistorialPromedios from '../components/HistorialPromedios'
+import Recaudos from '../components/Recaudos'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -650,6 +651,10 @@ export default function PerfilAsesor() {
             </section>
 
             <HistorialPromedios asesorId={asesorId} />
+
+            {/* Recaudos — el propio asesor puede registrar sus pagos de
+                factura y abonos, en la parte inferior de su perfil. */}
+            <Recaudos asesorId={asesorId} />
           </>
         )}
       </main>

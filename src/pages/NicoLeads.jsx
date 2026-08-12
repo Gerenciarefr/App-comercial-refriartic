@@ -100,6 +100,7 @@ const FORM_VACIO = {
   nombre_contacto: '',
   empresa: '',
   telefono: '',
+  telefono_2: '',
   ciudad: '',
   origen: '',
   canal_adquisicion: '',
@@ -152,6 +153,13 @@ const IconX = (props) => (
   <IconBase {...props}>
     <line x1="18" y1="6" x2="6" y2="18" />
     <line x1="6" y1="6" x2="18" y2="18" />
+  </IconBase>
+)
+const IconAlertTriangle = (props) => (
+  <IconBase {...props}>
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
   </IconBase>
 )
 
@@ -312,6 +320,7 @@ export default function NicoLeads() {
       nombre_contacto: form.nombre_contacto.trim(),
       empresa: form.empresa.trim() || null,
       telefono: form.telefono.trim(),
+      telefono_2: form.telefono_2.trim() || null,
       ciudad: form.ciudad.trim() || null,
       notas_diagnostico: form.notas_diagnostico.trim() || null,
       origen: form.origen,
@@ -520,6 +529,15 @@ export default function NicoLeads() {
                   </div>
                 </div>
 
+                {/* Motivo de venta perdida — visible de un vistazo en la lista,
+                    sin tener que entrar a la ficha del lead. */}
+                {lead.estado === 'venta_perdida' && lead.motivo_perdida && (
+                  <div className="mt-2.5 rounded-lg p-2 flex items-start gap-1.5" style={{ backgroundColor: '#FCEBEB' }}>
+                    <IconAlertTriangle size={12} style={{ color: '#A32D2D', flexShrink: 0, marginTop: 1 }} />
+                    <p className="text-[11px]" style={{ color: '#A32D2D' }}>{lead.motivo_perdida}</p>
+                  </div>
+                )}
+
                 <div className="mt-3 pt-3 flex items-center justify-between gap-2" style={{ borderTop: `0.5px solid ${C.border}` }}>
                   <div className="flex items-center gap-2">
                     <span
@@ -593,6 +611,17 @@ export default function NicoLeads() {
                   className={inputCls}
                   style={inputStyle}
                   required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs" style={{ color: C.textSecondary }}>Segundo número de celular (opcional)</label>
+                <input
+                  type="tel"
+                  value={form.telefono_2}
+                  onChange={(e) => cambiarForm('telefono_2', e.target.value)}
+                  className={inputCls}
+                  style={inputStyle}
                 />
               </div>
 
