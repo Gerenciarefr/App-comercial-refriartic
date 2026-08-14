@@ -813,6 +813,24 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
     return 0
   })
 
+  // Para el director: agrupar las misiones del día por asesor, mostrando
+  // primero todas las misiones de un asesor, luego las del siguiente, en
+  // orden alfabético por nombre — con un pequeño título por grupo. Para el
+  // asesor normal se mantiene un solo grupo sin título (comportamiento
+  // anterior, sin cambios visuales).
+  const grupos = esDirector
+    ? Object.values(
+        ordenadas.reduce((acc, m) => {
+          const clave = m.asesor_id || 'sin_asesor'
+          if (!acc[clave]) {
+            acc[clave] = { asesorId: clave, nombre: nombreAsesorId(m.asesor_id) || 'Sin asesor', items: [] }
+          }
+          acc[clave].items.push(m)
+          return acc
+        }, {})
+      ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    : [{ asesorId: null, nombre: null, items: ordenadas }]
+
   const copiarMensaje = async (m) => {
     try {
       await navigator.clipboard.writeText(m.contenido || '')
@@ -956,24 +974,33 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
         {ordenadas.length === 0 && <p className="text-sm py-6 text-center" style={{ color: C.textMuted }}>Sin misiones este día.</p>}
 
         {/* Línea de tiempo: círculo de color por grupo conectado por una línea
-            vertical, con hora, título y contacto a la derecha del círculo. */}
-        <div className="relative">
-          {ordenadas.length > 1 && (
-            <div
-              className="absolute top-2 bottom-2 w-0.5"
-              style={{ left: 16, backgroundColor: '#EDEDE7' }}
-            />
-          )}
+            vertical, con hora, título y contacto a la derecha del círculo.
+            Como director, las misiones se agrupan por asesor (grupos[]),
+            cada uno con su propio título y su propia línea vertical. */}
+        {grupos.map((grupo) => (
+          <div key={grupo.asesorId ?? 'todos'} className="mb-4 last:mb-0">
+            {esDirector && grupo.nombre && (
+              <p className="text-[11px] font-bold uppercase tracking-wide mb-2 px-1" style={{ color: C.textMuted }}>
+                {grupo.nombre}
+              </p>
+            )}
+            <div className="relative">
+              {grupo.items.length > 1 && (
+                <div
+                  className="absolute top-2 bottom-2 w-0.5"
+                  style={{ left: 16, backgroundColor: '#EDEDE7' }}
+                />
+              )}
 
-          {ordenadas.map((m, idx) => {
-            const abierto = expandidoId === m.id
-            const datos = extra[m.id]
-            const simple = esMisionSimple(m)
-            const urgente = esMisionUrgente(m) && !m.cumplida
-            const esUltimo = idx === ordenadas.length - 1
-            const pendienteMotivo = motivoPendiente[m.id]
+              {grupo.items.map((m, idx) => {
+                const abierto = expandidoId === m.id
+                const datos = extra[m.id]
+                const simple = esMisionSimple(m)
+                const urgente = esMisionUrgente(m) && !m.cumplida
+                const esUltimo = idx === grupo.items.length - 1
+                const pendienteMotivo = motivoPendiente[m.id]
 
-            return (
+                return (
               <div key={m.id} className="relative flex gap-3" style={{ paddingBottom: esUltimo ? 0 : 20 }}>
                 <span
                   className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 relative z-10"
@@ -1263,8 +1290,10 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                 </div>
               </div>
             )
-          })}
-        </div>
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

@@ -124,6 +124,16 @@ const IconChevron = ({ open, ...props }) => (
     <polyline points="6 9 12 15 18 9" />
   </IconBase>
 )
+const IconChevronLeft = (props) => (
+  <IconBase {...props}>
+    <polyline points="15 18 9 12 15 6" />
+  </IconBase>
+)
+const IconChevronRight = (props) => (
+  <IconBase {...props}>
+    <polyline points="9 18 15 12 9 6" />
+  </IconBase>
+)
 const IconUsers = (props) => (
   <IconBase {...props}>
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -177,6 +187,8 @@ function statsVacias() {
     valorTrimestreConIva: 0,
     valorAnioSinIva: 0,
     valorAnioConIva: 0,
+    recaudoSemana: 0,
+    recaudoMes: 0,
     visitasPorTipo: { recorrido_zona: 0, apoyo_entrega: 0, cita_programada: 0, visita_postventa: 0 },
   }
 }
@@ -215,7 +227,13 @@ export default function NicoResumen() {
   const [metasComerciales, setMetasComerciales] = useState([])
   const [periodoMetas, setPeriodoMetas] = useState('mensual')
 
-  const semana = rangoSemana(0)
+  // Navegación de semanas: 0 = semana actual, -1 = semana pasada, etc. — el
+  // director puede moverse hacia atrás para ver el resultado de semanas
+  // anteriores (mes/trimestre/año se recalculan también respecto a esa
+  // semana, igual que en el perfil de cada asesor).
+  const [offsetSemana, setOffsetSemana] = useState(0)
+
+  const semana = rangoSemana(offsetSemana)
   const mes = rangoMes(semana.inicio)
   const trimestre = rangoTrimestre(semana.inicio)
   const anio = rangoAnio(semana.inicio)
@@ -275,7 +293,7 @@ export default function NicoResumen() {
       const leadIds = (todosLeads || []).map((l) => l.id)
       const clientIds = (todosClientes || []).map((c) => c.id)
 
-      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }] =
+      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }, { data: abonosRango }] =
         await Promise.all([
           supabase
             .from('leads')
@@ -307,12 +325,33 @@ export default function NicoResumen() {
             .in('asesor_id', asesorIds)
             .gte('fecha_programada', semana.inicio)
             .lte('fecha_programada', semana.fin),
+          // Recaudos (abonos de factura) — se llega a asesor_id a través de
+          // pagos_factura, ya que abonos_factura no tiene esa columna directa.
+          supabase
+            .from('abonos_factura')
+            .select('valor_abonado, fecha_abono, pagos_factura!inner(asesor_id)')
+            .in('pagos_factura.asesor_id', asesorIds)
+            .gte('fecha_abono', rangoInicio.slice(0, 10))
+            .lt('fecha_abono', rangoFinExclusivo.slice(0, 10)),
         ])
 
       const enSemana = (fecha) => fecha >= semana.inicio && fecha < semana.finExclusivo
       const enMes = (fecha) => fecha >= mes.inicio && fecha < mes.finExclusivo
       const enTrimestre = (fecha) => fecha >= trimestre.inicio && fecha < trimestre.finExclusivo
       const enAnio = (fecha) => fecha >= anio.inicio && fecha < anio.finExclusivo
+
+      // fecha_abono es una columna `date` (sin hora, ej. "2026-08-10"), así que
+      // no se puede comparar como texto contra los límites ISO de arriba (la
+      // comparación de strings de distinto largo no da el resultado correcto).
+      // Se convierte a Date real antes de comparar.
+      const enSemanaFecha = (fechaStr) => {
+        const d = new Date(`${fechaStr}T00:00:00`)
+        return d >= new Date(semana.inicio) && d < new Date(semana.finExclusivo)
+      }
+      const enMesFecha = (fechaStr) => {
+        const d = new Date(`${fechaStr}T00:00:00`)
+        return d >= new Date(mes.inicio) && d < new Date(mes.finExclusivo)
+      }
 
       const porAsesor = {}
       asesorIds.forEach((id) => {
@@ -388,6 +427,15 @@ export default function NicoResumen() {
         }
       })
 
+      ;(abonosRango || []).forEach((a) => {
+        const asesorId = a.pagos_factura?.asesor_id
+        const s = porAsesor[asesorId]
+        if (!s || !a.fecha_abono) return
+        const valor = Number(a.valor_abonado || 0)
+        if (enSemanaFecha(a.fecha_abono)) s.recaudoSemana += valor
+        if (enMesFecha(a.fecha_abono)) s.recaudoMes += valor
+      })
+
       setStatsPorAsesor(porAsesor)
       setAsesoresSeleccionados((prev) => (prev.length > 0 ? prev : asesorIds))
     } catch (err) {
@@ -397,7 +445,7 @@ export default function NicoResumen() {
       setCargando(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [offsetSemana])
 
   useEffect(() => {
     cargar()
@@ -430,6 +478,8 @@ export default function NicoResumen() {
       valorSemanaConIva: acc.valorSemanaConIva + s.valorSemanaConIva,
       valorMesSinIva: acc.valorMesSinIva + s.valorMesSinIva,
       valorMesConIva: acc.valorMesConIva + s.valorMesConIva,
+      recaudoSemana: acc.recaudoSemana + s.recaudoSemana,
+      recaudoMes: acc.recaudoMes + s.recaudoMes,
       visitasPorTipo: {
         recorrido_zona: acc.visitasPorTipo.recorrido_zona + s.visitasPorTipo.recorrido_zona,
         apoyo_entrega: acc.visitasPorTipo.apoyo_entrega + s.visitasPorTipo.apoyo_entrega,
@@ -517,6 +567,33 @@ export default function NicoResumen() {
       </header>
 
       <main className="px-4 -mt-5 space-y-5">
+        {/* Navegador de semana: permite ver el resumen de semanas anteriores.
+            Mes/trimestre/año se recalculan también en función de la semana
+            elegida, igual que en el perfil de cada asesor. */}
+        <div className="rounded-2xl p-3 flex items-center justify-between" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
+          <button
+            onClick={() => setOffsetSemana((o) => o - 1)}
+            className="p-1.5 rounded-lg flex items-center gap-1 text-sm font-medium"
+            style={{ color: C.navy }}
+          >
+            <IconChevronLeft size={16} />
+            Anterior
+          </button>
+          <div className="text-center">
+            <p className="text-sm font-semibold" style={{ color: C.textPrimary }}>{semana.etiqueta}</p>
+            {offsetSemana === 0 && <p className="text-[11px]" style={{ color: C.orange }}>Semana actual</p>}
+          </div>
+          <button
+            onClick={() => setOffsetSemana((o) => o + 1)}
+            disabled={offsetSemana >= 0}
+            className="p-1.5 rounded-lg flex items-center gap-1 text-sm font-medium disabled:opacity-30"
+            style={{ color: C.navy }}
+          >
+            Siguiente
+            <IconChevronRight size={16} />
+          </button>
+        </div>
+
         {pendientes > 0 && (
           <Link
             to="/aprobar-usuarios"
@@ -746,7 +823,14 @@ export default function NicoResumen() {
               {mostrar('ventas') && (
                 <div>
                   <SectionTitle icon={<IconRocket size={14} style={{ color: C.textPrimary }} />} texto="Ventas" />
-                  <StatCard label="Ventas hechas" semana={combinado.ventasSemana} mes={combinado.ventasMes} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard label="Ventas hechas" semana={combinado.ventasSemana} mes={combinado.ventasMes} />
+                    <StatCard
+                      label="Recaudado"
+                      semana={formatoCOP.format(combinado.recaudoSemana)}
+                      mes={formatoCOP.format(combinado.recaudoMes)}
+                    />
+                  </div>
                 </div>
               )}
             </section>

@@ -162,6 +162,11 @@ const IconAlertTriangle = (props) => (
     <line x1="12" y1="17" x2="12.01" y2="17" />
   </IconBase>
 )
+const IconChevronDown = (props) => (
+  <IconBase {...props}>
+    <polyline points="6 9 12 15 18 9" />
+  </IconBase>
+)
 
 // Estilo compartido para inputs/selects nativos, para que se vean parte del
 // mismo sistema (bordes, radios y colores de la paleta) sin perder su
@@ -196,6 +201,9 @@ export default function NicoLeads() {
   const [form, setForm] = useState(FORM_VACIO)
   const [guardando, setGuardando] = useState(false)
   const [formError, setFormError] = useState(null)
+
+  // Desplegable "Ventas perdidas": empieza cerrado y se abre con un clic.
+  const [mostrarPerdidos, setMostrarPerdidos] = useState(false)
 
   const cargarAsesores = useCallback(async () => {
     const { data, error } = await supabase
@@ -341,6 +349,15 @@ export default function NicoLeads() {
     cargarLeads()
   }
 
+  // "Venta perdida" se retira de la lista principal y se acumula detrás de
+  // un desplegable al final de la página — respeta los mismos filtros que
+  // ya se aplicaron en la consulta (asesor, origen, fechas, búsqueda). Si el
+  // director filtra explícitamente por el estado "Venta Perdida", ya no
+  // tiene sentido esconderlas: se muestran todas normalmente.
+  const filtroEsPerdidos = filtroEstado === 'venta_perdida'
+  const leadsActivos = filtroEsPerdidos ? leads : leads.filter((l) => l.estado !== 'venta_perdida')
+  const leadsPerdidos = filtroEsPerdidos ? [] : leads.filter((l) => l.estado === 'venta_perdida')
+
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: C.bg }}>
       <header
@@ -467,7 +484,7 @@ export default function NicoLeads() {
 
         {/* Lista */}
         <div className="space-y-3">
-          {leads.map((lead) => {
+          {leadsActivos.map((lead) => {
             const info = estadoInfo(lead.estado)
             const asesorActual = asesores.find((a) => a.id === lead.asesor_id)
             const nombreAsesorActual = asesorActual ? asesorActual.full_name || asesorActual.nombre : null
@@ -576,6 +593,138 @@ export default function NicoLeads() {
             )
           })}
         </div>
+
+        {/* Ventas perdidas: acumuladas detrás de un desplegable, para no
+            saturar la lista principal de leads activos. */}
+        {leadsPerdidos.length > 0 && (
+          <div className="mt-4">
+            <button
+              onClick={() => setMostrarPerdidos((v) => !v)}
+              className="w-full flex items-center justify-between rounded-2xl p-4"
+              style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}
+            >
+              <span className="text-sm font-semibold flex items-center gap-2" style={{ color: C.textPrimary }}>
+                <IconAlertTriangle size={14} style={{ color: '#A32D2D' }} />
+                Ventas perdidas ({leadsPerdidos.length})
+              </span>
+              <IconChevronDown
+                size={16}
+                style={{ color: C.textMuted, transform: mostrarPerdidos ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+              />
+            </button>
+
+            {mostrarPerdidos && (
+              <div className="space-y-3 mt-3">
+                {leadsPerdidos.map((lead) => {
+                  const info = estadoInfo(lead.estado)
+                  const asesorActual = asesores.find((a) => a.id === lead.asesor_id)
+                  const nombreAsesorActual = asesorActual ? asesorActual.full_name || asesorActual.nombre : null
+                  const link = waLink(lead.telefono)
+
+                  return (
+                    <div
+                      key={lead.id}
+                      onClick={() => navigate(`/leads/${lead.id}`)}
+                      className="rounded-2xl p-4 cursor-pointer transition-shadow hover:shadow-md"
+                      style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <p className="font-semibold text-base leading-tight" style={{ color: C.textPrimary }}>
+                            {lead.empresa || 'Sin nombre de empresa'}
+                          </p>
+                          <p className="text-sm mt-0.5" style={{ color: C.textSecondary }}>{lead.nombre_contacto}</p>
+                          {lead.ciudad && (
+                            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: C.textMuted }}>
+                              <IconMapPin size={11} />
+                              {lead.ciudad}
+                            </p>
+                          )}
+                          {link ? (
+                            <a
+                              href={link}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs font-medium hover:underline mt-1 inline-flex items-center gap-1"
+                              style={{ color: '#0F6E56' }}
+                            >
+                              <IconMessage size={12} />
+                              {lead.telefono}
+                            </a>
+                          ) : (
+                            <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>Sin teléfono</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span
+                            className="text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap"
+                            style={{ backgroundColor: info.bg, color: info.text }}
+                          >
+                            {info.label}
+                          </span>
+                          {lead.valor_cotizado ? (
+                            <span className="text-xs font-semibold" style={{ color: C.textPrimary }}>
+                              ${Number(lead.valor_cotizado).toLocaleString('es-CO')}
+                            </span>
+                          ) : null}
+                          {(lead.origen || lead.canal_adquisicion) && (
+                            <span className="text-[11px] text-right" style={{ color: C.textMuted }}>
+                              {ORIGENES.find((o) => o.value === lead.origen)?.label || lead.origen}
+                              {lead.canal_adquisicion ? ` · ${labelCanal(lead.origen, lead.canal_adquisicion)}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {lead.motivo_perdida && (
+                        <div className="mt-2.5 rounded-lg p-2 flex items-start gap-1.5" style={{ backgroundColor: '#FCEBEB' }}>
+                          <IconAlertTriangle size={12} style={{ color: '#A32D2D', flexShrink: 0, marginTop: 1 }} />
+                          <p className="text-[11px]" style={{ color: '#A32D2D' }}>{lead.motivo_perdida}</p>
+                        </div>
+                      )}
+
+                      <div className="mt-3 pt-3 flex items-center justify-between gap-2" style={{ borderTop: `0.5px solid ${C.border}` }}>
+                        <div className="flex items-center gap-2">
+                          <span
+                            title={nombreAsesorActual || 'Sin asesor'}
+                            className="text-[11px] font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: C.navy, color: '#FFFFFF' }}
+                          >
+                            {iniciales(nombreAsesorActual)}
+                          </span>
+                          {esDirector ? (
+                            <select
+                              value={lead.asesor_id || ''}
+                              disabled={reasignando === lead.id}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => reasignar(lead.id, e.target.value)}
+                              className="rounded-lg px-2 py-1 text-sm bg-white"
+                              style={{ border: `0.5px solid ${C.border}`, color: C.textPrimary }}
+                            >
+                              <option value="" disabled>
+                                Sin asesor
+                              </option>
+                              {asesores.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.full_name || a.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-sm" style={{ color: C.textSecondary }}>{nombreAsesorActual || 'Sin asesor'}</span>
+                          )}
+                        </div>
+
+                        <span className="text-xs" style={{ color: C.textMuted }}>{formatearFecha(lead.created_at)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Modal Agregar Lead */}
