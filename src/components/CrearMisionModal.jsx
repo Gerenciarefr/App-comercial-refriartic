@@ -12,6 +12,7 @@ const VACIO = {
   lead_id: '',
   client_id: '',
   tipo_visita: '',
+  mostrar_en_entregas: false,
 }
 
 const TIPOS_VISITA = [
@@ -107,6 +108,7 @@ export default function CrearMisionModal({ abierto, onClose, onCreada, leadIdIni
       estado: 'pendiente',
       grupo_mision_id: grupoMisionId,
       tipo_visita: form.tipo_visita || null,
+      mostrar_en_entregas: form.mostrar_en_entregas,
     }))
 
     const { error } = await supabase.from('manual_tasks').insert(filas)
@@ -266,6 +268,22 @@ export default function CrearMisionModal({ abierto, onClose, onCreada, leadIdIni
                 Al marcarse cumplida, esta misión se contará por separado en las estadísticas de visitas.
               </p>
             )}
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2">
+            <input
+              type="checkbox"
+              id="mostrar_en_entregas"
+              checked={form.mostrar_en_entregas}
+              onChange={(e) => cambiar('mostrar_en_entregas', e.target.checked)}
+              className="w-4 h-4 mt-0.5"
+            />
+            <label htmlFor="mostrar_en_entregas" className="text-xs text-gray-600">
+              Mostrar en "Entregas de la semana"
+              <span className="block text-[11px] text-gray-400 mt-0.5">
+                Aparece en el calendario de entregas programadas y, al marcarse cumplida, suma 5 puntos al ranking.
+              </span>
+            </label>
           </div>
 
           <div>

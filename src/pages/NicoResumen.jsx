@@ -253,7 +253,13 @@ export default function NicoResumen() {
         { data: asesoresData, error: e4 },
         { data: metasComercialesData, error: e6 },
       ] = await Promise.all([
-        supabase.from('v_ranking_semanal').select('*').order('puntaje', { ascending: false }),
+        // fn_ranking_semana calcula el ranking para la semana elegida
+        // (offsetSemana) y de paso el acumulado de puntos del mes que la
+        // contiene — reemplaza a la vieja vista v_ranking_semanal, que
+        // estaba fija a "la semana actual" y no permitía navegar semanas
+        // pasadas. El orden ya viene resuelto por la función: puntaje de la
+        // semana desc, y en caso de empate, más ventas hechas primero.
+        supabase.rpc('fn_ranking_semana', { p_offset_semanas: offsetSemana }),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('active', false),
         supabase
           .from('profiles')
@@ -666,7 +672,7 @@ export default function NicoResumen() {
                     >
                       {i + 1}
                     </span>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="font-semibold" style={{ color: C.textPrimary }}>
                         {a.full_name}
                       </p>
@@ -675,9 +681,26 @@ export default function NicoResumen() {
                         {a.ventas_semana} ventas
                       </p>
                     </div>
-                    <span className="text-sm font-bold" style={{ color: C.textPrimary }}>
-                      {a.puntaje} pts
-                    </span>
+                    {/* Puntos de la semana elegida y puntos acumulados del mes,
+                        con la misma relevancia visual (mismo tamaño y estilo). */}
+                    <div className="flex gap-1.5 shrink-0">
+                      <div className="text-center rounded-xl px-2.5 py-1.5" style={{ backgroundColor: '#EEEDFE' }}>
+                        <p className="text-sm font-bold leading-tight" style={{ color: '#3C3489' }}>
+                          {a.puntaje_semana}
+                        </p>
+                        <p className="text-[9px] leading-tight" style={{ color: '#3C3489' }}>
+                          pts semana
+                        </p>
+                      </div>
+                      <div className="text-center rounded-xl px-2.5 py-1.5" style={{ backgroundColor: '#FAEEDA' }}>
+                        <p className="text-sm font-bold leading-tight" style={{ color: '#854F0B' }}>
+                          {a.puntaje_mes}
+                        </p>
+                        <p className="text-[9px] leading-tight" style={{ color: '#854F0B' }}>
+                          pts mes
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ))}
                 {ranking.length === 0 && (

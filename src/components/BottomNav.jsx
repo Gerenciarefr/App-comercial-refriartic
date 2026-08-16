@@ -109,6 +109,29 @@ const itemsDirector = [
 // Mientras el Modo Apoyo está activo, el menú se reduce a un único acceso.
 const itemsModoApoyo = [{ to: '/leads', label: 'Leads', Icon: IconList }]
 
+// Ítem normal del menú (no "Ruta") — mismo estilo de siempre.
+function ItemNav({ item }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.to === '/'}
+      className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 text-[9.5px] font-medium rounded-2xl transition-colors"
+    >
+      {({ isActive }) => (
+        <span
+          className="flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-2xl"
+          style={isActive ? { backgroundColor: 'rgba(252,163,17,0.15)' } : undefined}
+        >
+          <item.Icon size={19} style={{ color: isActive ? C.orange : 'rgba(255,255,255,0.45)' }} />
+          <span style={{ color: isActive ? C.orange : 'rgba(255,255,255,0.45)', fontWeight: isActive ? 600 : 500 }}>
+            {item.label}
+          </span>
+        </span>
+      )}
+    </NavLink>
+  )
+}
+
 export default function BottomNav({ esDirector, modoApoyo }) {
   const { refrescarPerfil } = useAuth()
   const [, setModoApoyoLocal] = useModoApoyoLocal()
@@ -118,6 +141,16 @@ export default function BottomNav({ esDirector, modoApoyo }) {
   const [verificando, setVerificando] = useState(false)
 
   const items = modoApoyo ? itemsModoApoyo : esDirector ? itemsDirector : itemsAsesor
+
+  // "Ruta" es el acceso más usado en el día a día (director y asesor), así
+  // que se separa del resto para renderizarse en el centro del menú, con un
+  // botón elevado y más grande — el resto de accesos se reparte a los lados
+  // en partes iguales, sin importar cuántos sean.
+  const rutaItem = items.find((i) => i.to === '/hoja-de-ruta')
+  const otrosItems = items.filter((i) => i.to !== '/hoja-de-ruta')
+  const mitad = Math.ceil(otrosItems.length / 2)
+  const izquierda = otrosItems.slice(0, mitad)
+  const derecha = otrosItems.slice(mitad)
 
   const abrirPrompt = () => {
     setPin('')
@@ -166,25 +199,37 @@ export default function BottomNav({ esDirector, modoApoyo }) {
         className="fixed bottom-3 left-3 right-3 rounded-[22px] flex justify-around items-center py-2 px-1"
         style={{ backgroundColor: C.navy, paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
       >
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 text-[9.5px] font-medium rounded-2xl transition-colors"
-          >
+        {izquierda.map((item) => (
+          <ItemNav key={item.to} item={item} />
+        ))}
+
+        {rutaItem && (
+          <NavLink to={rutaItem.to} className="flex flex-col items-center gap-0.5 shrink-0 -mt-6">
             {({ isActive }) => (
-              <span
-                className="flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-2xl"
-                style={isActive ? { backgroundColor: 'rgba(252,163,17,0.15)' } : undefined}
-              >
-                <item.Icon size={19} style={{ color: isActive ? C.orange : 'rgba(255,255,255,0.45)' }} />
-                <span style={{ color: isActive ? C.orange : 'rgba(255,255,255,0.45)', fontWeight: isActive ? 600 : 500 }}>
-                  {item.label}
+              <>
+                <span
+                  className="w-14 h-14 rounded-full flex items-center justify-center"
+                  style={{
+                    backgroundColor: C.orange,
+                    border: `4px solid ${C.navy}`,
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  <rutaItem.Icon size={24} style={{ color: '#412402' }} />
                 </span>
-              </span>
+                <span
+                  className="text-[9.5px] mt-0.5"
+                  style={{ color: isActive ? C.orange : 'rgba(255,255,255,0.75)', fontWeight: 700 }}
+                >
+                  {rutaItem.label}
+                </span>
+              </>
             )}
           </NavLink>
+        )}
+
+        {derecha.map((item) => (
+          <ItemNav key={item.to} item={item} />
         ))}
 
         {modoApoyo && (

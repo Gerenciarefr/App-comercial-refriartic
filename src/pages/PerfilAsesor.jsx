@@ -216,8 +216,11 @@ export default function PerfilAsesor() {
 
       // Ranking completo solo se usa para calcular MI puesto — nunca se
       // muestra la lista completa de todos los asesores en pantalla.
+      // fn_ranking_semana(0) = semana actual, con puntaje_semana y
+      // puntaje_mes ya calculados (mismo origen que usa el director en
+      // Resumen general, para que el puesto y los puntos coincidan siempre).
       const [{ data: rankingData, error: e1 }, { data: metasComercialesData, error: e2 }] = await Promise.all([
-        supabase.from('v_ranking_semanal').select('*').order('puntaje', { ascending: false }),
+        supabase.rpc('fn_ranking_semana', { p_offset_semanas: 0 }),
         supabase.from('metas_comerciales').select('*'),
       ])
 
@@ -482,7 +485,9 @@ export default function PerfilAsesor() {
             )}
 
             {/* Ranking: solo el puesto propio, nunca el orden de los demás.
-                Naranja solo si el puesto es el número 1. */}
+                Naranja solo si el puesto es el número 1. Muestra puntos de
+                la semana y puntos acumulados del mes, con la misma
+                relevancia visual (mismo tamaño y estilo). */}
             <section>
               <SectionTitle icon={<IconTrophy size={14} style={{ color: C.textPrimary }} />} texto="Tu puesto en el ranking semanal" />
               <div className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
@@ -496,7 +501,7 @@ export default function PerfilAsesor() {
                 >
                   {miPosicion ? `#${miPosicion}` : '—'}
                 </span>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="font-semibold" style={{ color: C.textPrimary }}>
                     {miPosicion ? `Puesto ${miPosicion} de ${totalAsesores}` : 'Aún no hay datos esta semana'}
                   </p>
@@ -508,9 +513,24 @@ export default function PerfilAsesor() {
                   )}
                 </div>
                 {miFilaRanking && (
-                  <span className="text-sm font-bold" style={{ color: C.textPrimary }}>
-                    {miFilaRanking.puntaje} pts
-                  </span>
+                  <div className="flex gap-1.5 shrink-0">
+                    <div className="text-center rounded-xl px-2.5 py-1.5" style={{ backgroundColor: '#EEEDFE' }}>
+                      <p className="text-sm font-bold leading-tight" style={{ color: '#3C3489' }}>
+                        {miFilaRanking.puntaje_semana}
+                      </p>
+                      <p className="text-[9px] leading-tight" style={{ color: '#3C3489' }}>
+                        pts semana
+                      </p>
+                    </div>
+                    <div className="text-center rounded-xl px-2.5 py-1.5" style={{ backgroundColor: '#FAEEDA' }}>
+                      <p className="text-sm font-bold leading-tight" style={{ color: '#854F0B' }}>
+                        {miFilaRanking.puntaje_mes}
+                      </p>
+                      <p className="text-[9px] leading-tight" style={{ color: '#854F0B' }}>
+                        pts mes
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
             </section>
