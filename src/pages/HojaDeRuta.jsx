@@ -274,6 +274,14 @@ const IconCalendar = (props) => (
     <line x1="3" y1="10" x2="21" y2="10" />
   </IconBase>
 )
+const IconTruckSmall = (props) => (
+  <IconBase {...props}>
+    <rect x="1" y="6" width="15" height="12" rx="1" />
+    <path d="M16 10h4l3 3v5h-7z" />
+    <circle cx="6" cy="19" r="2" />
+    <circle cx="17.5" cy="19" r="2" />
+  </IconBase>
+)
 
 // Íconos por grupo, usados en los círculos de la línea de tiempo del día.
 function IconGrupo({ grupo, size = 15, ...props }) {
@@ -393,7 +401,7 @@ export default function HojaDeRuta() {
         .lte('fecha_programada', finStr),
       supabase
         .from('manual_tasks')
-        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita')
+        .select('id, asesor_id, titulo, descripcion, lead_id, client_id, fecha_programada, hora_programada, completado_at, lugar, tipo_visita, mostrar_en_entregas')
         .in('asesor_id', asesoresVisibles)
         .gte('fecha_programada', inicioStr)
         .lte('fecha_programada', finStr),
@@ -482,6 +490,7 @@ export default function HojaDeRuta() {
         client_id: t.client_id,
         tabla: 'manual_tasks',
         idOriginal: t.id,
+        mostrarEnEntregas: !!t.mostrar_en_entregas,
       })
     })
     ;(leadsRes.data || []).forEach((l) => {
@@ -748,6 +757,7 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
   const [copiadoId, setCopiadoId] = useState(null)
   const [reprogramando, setReprogramando] = useState(null)
   const [eliminandoMision, setEliminandoMision] = useState(null)
+  const [guardandoEntregas, setGuardandoEntregas] = useState(null)
 
   // Estado "venta perdida" pendiente de motivo — reemplaza al viejo
   // window.prompt(), que no funciona en la PWA instalada (iOS/Android lo
@@ -796,6 +806,24 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
   }
 
   const puedeReprogramar = (mision) => esDirector || mision.asesor_id === profile?.id
+
+  // Alterna si la misión manual aparece en la tarjeta de "Entregas
+  // programadas" — mismo criterio de permiso que reprogramar (director o
+  // el asesor asignado).
+  const toggleMostrarEnEntregas = async (mision) => {
+    const nuevoValor = !mision.mostrarEnEntregas
+    setGuardandoEntregas(mision.id)
+    const { error } = await supabase
+      .from('manual_tasks')
+      .update({ mostrar_en_entregas: nuevoValor })
+      .eq('id', mision.idOriginal)
+    setGuardandoEntregas(null)
+    if (error) {
+      alert('No se pudo actualizar: ' + error.message)
+      return
+    }
+    onReprogramada?.()
+  }
 
   useEffect(() => {
     supabase
@@ -1028,6 +1056,7 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                       <p className="text-[10px] mt-0.5" style={{ color: C.textMuted }}>
                         {GRUPOS[m.grupo].label}
                         {esDirector ? ` · ${nombreAsesorId(m.asesor_id)}` : ''}
+                        {m.tabla === 'manual_tasks' && m.mostrarEnEntregas ? ' · En entregas' : ''}
                       </p>
                     </div>
                     {urgente && (
@@ -1204,6 +1233,29 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                             </button>
                           </div>
                         </div>
+                      )}
+
+                      {/* Mostrar/ocultar en "Entregas programadas" — misma
+                          casilla que existe al crear la misión (CrearMisionModal),
+                          disponible aquí también para editarla después de creada. */}
+                      {!datos?.cargando && m.tabla === 'manual_tasks' && puedeReprogramar(m) && (
+                        <label
+                          className="flex items-start gap-2 rounded-lg p-2"
+                          style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!m.mostrarEnEntregas}
+                            disabled={guardandoEntregas === m.id}
+                            onChange={() => toggleMostrarEnEntregas(m)}
+                            className="w-4 h-4 mt-0.5"
+                          />
+                          <span className="text-xs flex items-center gap-1" style={{ color: C.textSecondary }}>
+                            <IconTruckSmall size={12} />
+                            Mostrar en "Entregas de la semana"
+                          </span>
+                        </label>
                       )}
 
                       {/* Botones inferiores: simples = solo completada (ancho completo);

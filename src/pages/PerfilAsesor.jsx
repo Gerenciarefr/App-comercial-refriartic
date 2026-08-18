@@ -183,6 +183,7 @@ function statsVacias() {
 export default function PerfilAsesor() {
   const { profile } = useAuth()
   const asesorId = profile?.id
+  const esDirector = profile?.rol === 'director' || profile?.role === 'director'
 
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(null)
@@ -673,8 +674,10 @@ export default function PerfilAsesor() {
             <HistorialPromedios asesorId={asesorId} />
 
             {/* Recaudos — el propio asesor puede registrar sus pagos de
-                factura y abonos, en la parte inferior de su perfil. */}
-            <Recaudos asesorId={asesorId} />
+                factura y abonos; eliminar un recaudo queda reservado al
+                director (esDirector solo será true si un director llega a
+                ver esta pantalla como su propio perfil). */}
+            <Recaudos asesorId={asesorId} esDirector={esDirector} />
           </>
         )}
       </main>

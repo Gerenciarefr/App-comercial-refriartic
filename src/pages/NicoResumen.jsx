@@ -642,7 +642,12 @@ export default function NicoResumen() {
                   <p className="text-xs" style={{ color: C.orange }}>
                     Este mes
                   </p>
-                  <p className="text-base font-bold text-white">{formatoCOP.format(combinado.valorMesSinIva)}</p>
+                  <div className="text-right">
+                    <p className="text-base font-bold text-white">{formatoCOP.format(combinado.valorMesSinIva)}</p>
+                    <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      {formatoCOP.format(combinado.valorMesConIva)} con IVA
+                    </p>
+                  </div>
                 </div>
               </section>
             )}

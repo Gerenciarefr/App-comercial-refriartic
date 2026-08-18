@@ -711,8 +711,9 @@ export default function AsesorDetalle() {
 
             {/* Recaudos — pagos de factura y sus abonos, en la parte inferior
                 del perfil del asesor (visible también en su propio perfil,
-                PerfilAsesor.jsx). */}
-            <Recaudos asesorId={id} />
+                PerfilAsesor.jsx). El director puede eliminar recaudos desde
+                aquí (esDirector). */}
+            <Recaudos asesorId={id} esDirector />
 
             {!editando && (
               <section>

@@ -70,11 +70,20 @@ const IconWallet = (props) => (
     <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5h-4a2 2 0 0 1 0-4h4Z" />
   </IconBase>
 )
+const IconTrash = (props) => (
+  <IconBase {...props}>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </IconBase>
+)
 
 const inputCls = 'w-full rounded-xl px-3 py-2 text-sm bg-white focus:outline-none'
 const inputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimary }
 
-export default function Recaudos({ asesorId }) {
+export default function Recaudos({ asesorId, esDirector = false }) {
   const [pagos, setPagos] = useState([])
   const [abonosPorPago, setAbonosPorPago] = useState({}) // { [pagoId]: [abono, ...] }
   const [clientesMap, setClientesMap] = useState({})
@@ -82,6 +91,7 @@ export default function Recaudos({ asesorId }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(null)
   const [expandidoId, setExpandidoId] = useState(null)
+  const [eliminandoId, setEliminandoId] = useState(null)
 
   const [modalAbierto, setModalAbierto] = useState(false)
 
@@ -148,6 +158,37 @@ export default function Recaudos({ asesorId }) {
     return pago.numero_pedido_manual
   }
 
+  // Solo el director puede eliminar un recaudo — se borran primero sus
+  // abonos (abonos_factura no tiene ON DELETE CASCADE hacia pagos_factura)
+  // y luego el pago en sí.
+  const eliminarPago = async (pago) => {
+    const ok = window.confirm(
+      `¿Eliminar el pago de factura de "${nombreCliente(pago)}" (Pedido ${numeroPedido(pago)})? Esta acción no se puede deshacer.`
+    )
+    if (!ok) return
+
+    setEliminandoId(pago.id)
+    setError(null)
+
+    const { error: eAbonos } = await supabase.from('abonos_factura').delete().eq('pago_id', pago.id)
+    if (eAbonos) {
+      setEliminandoId(null)
+      setError(eAbonos.message)
+      return
+    }
+
+    const { error: ePago } = await supabase.from('pagos_factura').delete().eq('id', pago.id)
+    setEliminandoId(null)
+
+    if (ePago) {
+      setError(ePago.message)
+      return
+    }
+
+    if (expandidoId === pago.id) setExpandidoId(null)
+    cargar()
+  }
+
   return (
     <section>
       <div className="flex items-center justify-between mb-2 px-1">
@@ -183,18 +224,18 @@ export default function Recaudos({ asesorId }) {
 
               return (
                 <div key={pago.id} className="rounded-xl" style={{ border: `0.5px solid ${C.border}` }}>
-                  <button
-                    onClick={() => setExpandidoId(abierto ? null : pago.id)}
-                    className="w-full flex items-start justify-between gap-2 p-3 text-left"
-                  >
-                    <div className="min-w-0">
+                  <div className="w-full flex items-start justify-between gap-2 p-3">
+                    <button
+                      onClick={() => setExpandidoId(abierto ? null : pago.id)}
+                      className="flex-1 min-w-0 text-left"
+                    >
                       <p className="text-sm font-semibold truncate" style={{ color: C.textPrimary }}>{nombreCliente(pago)}</p>
                       <p className="text-xs mt-0.5" style={{ color: C.textSecondary }}>Pedido {numeroPedido(pago)}</p>
                       <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>
                         {formatoCOP.format(pago.valor_total)} total
                         {saldo > 0 ? ` · Saldo ${formatoCOP.format(saldo)}` : ''}
                       </p>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span
                         className="text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
@@ -202,9 +243,22 @@ export default function Recaudos({ asesorId }) {
                       >
                         {info.label}
                       </span>
-                      <IconChevron open={abierto} size={15} style={{ color: C.textMuted }} />
+                      {esDirector && (
+                        <button
+                          onClick={() => eliminarPago(pago)}
+                          disabled={eliminandoId === pago.id}
+                          title="Eliminar recaudo"
+                          className="p-1 rounded-lg disabled:opacity-50"
+                          style={{ color: '#A32D2D' }}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      )}
+                      <button onClick={() => setExpandidoId(abierto ? null : pago.id)}>
+                        <IconChevron open={abierto} size={15} style={{ color: C.textMuted }} />
+                      </button>
                     </div>
-                  </button>
+                  </div>
 
                   {abierto && (
                     <div className="px-3 pb-3">
@@ -347,9 +401,11 @@ function AbonosPago({ pago, abonos, saldo, onCambio }) {
 
 // ---------------------------------------------------------------------------
 // Modal "Nuevo Pago de factura". El cliente puede elegirse de la lista real
-// (y entonces el pedido se amarra a un order_ops real de ese cliente) o
-// escribirse libremente (y entonces el número de pedido también se escribe
-// a mano, porque no hay un pedido real al que amarrarlo).
+// (y entonces el pedido se amarra a un order_ops real de ese cliente, y el
+// valor total de la factura se toma directo del valor con IVA de ese
+// pedido, sin volver a digitarlo) o escribirse libremente (y entonces el
+// número de pedido y el valor total también se escriben a mano, porque no
+// hay un pedido real al que amarrarlos).
 // ---------------------------------------------------------------------------
 function NuevoPagoModal({ asesorId, onClose, onCreado }) {
   const [modoCliente, setModoCliente] = useState('lista') // 'lista' | 'libre'
@@ -361,7 +417,7 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
   const [pedidoId, setPedidoId] = useState('')
   const [pedidoManual, setPedidoManual] = useState('')
 
-  const [valorTotal, setValorTotal] = useState('')
+  const [valorTotalManual, setValorTotalManual] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState(null)
 
@@ -388,27 +444,33 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
       .then(({ data }) => setPedidos(data || []))
   }, [modoCliente, clienteId])
 
+  // En modo "lista" el valor total no se digita: se toma del valor con IVA
+  // del pedido real seleccionado.
+  const pedidoSeleccionado = pedidos.find((p) => p.id === pedidoId) || null
+  const valorTotalLista = pedidoSeleccionado ? Number(pedidoSeleccionado.valor_con_iva || 0) : 0
+
   const guardar = async (e) => {
     e.preventDefault()
     setError(null)
 
-    if (!valorTotal || Number(valorTotal) <= 0) {
-      setError('El valor total es obligatorio.')
-      return
-    }
-
-    const payload = { asesor_id: asesorId, valor_total: Number(valorTotal) }
+    const payload = { asesor_id: asesorId }
 
     if (modoCliente === 'lista') {
       if (!clienteId) return setError('Selecciona un cliente de la lista.')
       if (!pedidoId) return setError('Selecciona el pedido real de ese cliente.')
+      if (!valorTotalLista || valorTotalLista <= 0) {
+        return setError('El pedido seleccionado no tiene un valor con IVA válido.')
+      }
       payload.client_id = clienteId
       payload.order_op_id = pedidoId
+      payload.valor_total = valorTotalLista
     } else {
       if (!clienteLibre.trim()) return setError('Escribe el nombre del cliente.')
       if (!pedidoManual.trim()) return setError('Escribe el número de pedido.')
+      if (!valorTotalManual || Number(valorTotalManual) <= 0) return setError('El valor total es obligatorio.')
       payload.cliente_nombre_libre = clienteLibre.trim()
       payload.numero_pedido_manual = pedidoManual.trim()
+      payload.valor_total = Number(valorTotalManual)
     }
 
     setGuardando(true)
@@ -490,6 +552,13 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
                   <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>Este cliente todavía no tiene pedidos registrados.</p>
                 )}
               </div>
+              {pedidoSeleccionado && (
+                <div className="rounded-lg px-3 py-2" style={{ backgroundColor: '#F4F4F2' }}>
+                  <p className="text-xs" style={{ color: C.textSecondary }}>Valor total de la factura</p>
+                  <p className="text-sm font-semibold" style={{ color: C.textPrimary }}>{formatoCOP.format(valorTotalLista)}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: C.textMuted }}>Se toma del valor con IVA del pedido seleccionado.</p>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -513,19 +582,18 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
                   style={inputStyle}
                 />
               </div>
+              <div>
+                <label className="text-xs" style={{ color: C.textSecondary }}>Valor total de la factura *</label>
+                <input
+                  type="number"
+                  value={valorTotalManual}
+                  onChange={(e) => setValorTotalManual(e.target.value)}
+                  className={inputCls}
+                  style={inputStyle}
+                />
+              </div>
             </>
           )}
-
-          <div>
-            <label className="text-xs" style={{ color: C.textSecondary }}>Valor total de la factura *</label>
-            <input
-              type="number"
-              value={valorTotal}
-              onChange={(e) => setValorTotal(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

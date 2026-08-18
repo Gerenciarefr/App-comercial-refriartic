@@ -144,11 +144,12 @@ export default function BottomNav({ esDirector, modoApoyo }) {
 
   // "Ruta" es el acceso más usado en el día a día (director y asesor), así
   // que se separa del resto para renderizarse en el centro del menú, con un
-  // botón elevado y más grande — el resto de accesos se reparte a los lados
-  // en partes iguales, sin importar cuántos sean.
+  // botón elevado y más grande — el resto de accesos se reparte a los lados,
+  // dejando un ítem extra del lado izquierdo para que "Ruta" quede corrida
+  // una posición hacia la derecha respecto al reparto simétrico original.
   const rutaItem = items.find((i) => i.to === '/hoja-de-ruta')
   const otrosItems = items.filter((i) => i.to !== '/hoja-de-ruta')
-  const mitad = Math.ceil(otrosItems.length / 2)
+  const mitad = Math.ceil(otrosItems.length / 2) + 1
   const izquierda = otrosItems.slice(0, mitad)
   const derecha = otrosItems.slice(mitad)
 

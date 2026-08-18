@@ -490,6 +490,27 @@ export default function NicoClienteDetalle() {
     cargarTodo()
   }
 
+  // Número de cotización editable — tanto el director como el asesor
+  // asignado pueden corregirlo (por ejemplo, si se digitó mal al crearla).
+  const actualizarNumeroCotizacion = async (cotizacionId, nuevoNumero) => {
+    const numero = (nuevoNumero || '').trim()
+    if (!numero) {
+      setCotizacionMsg({ tipo: 'error', texto: 'El número de cotización no puede quedar vacío.' })
+      cargarTodo()
+      return
+    }
+    const { error } = await supabase
+      .from('cotizaciones_clientes')
+      .update({ numero_cotizacion: numero })
+      .eq('id', cotizacionId)
+    if (error) {
+      setCotizacionMsg({ tipo: 'error', texto: 'No se pudo actualizar el número de cotización: ' + error.message })
+      cargarTodo()
+      return
+    }
+    cargarTodo()
+  }
+
   const marcarEntregado = async (pedido) => {
     if (!confirm(`¿Marcar el pedido ${pedido.numero_pedido} como entregado? Esto genera las 3 misiones de postventa.`)) return
 
@@ -1292,9 +1313,23 @@ export default function NicoClienteDetalle() {
                 return (
                   <div key={c.id} className="rounded-xl p-3" style={{ border: `0.5px solid ${C.border}` }}>
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium" style={{ color: C.textPrimary }}>{c.numero_cotizacion}</p>
-                        <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: C.textSecondary }}>
+                      <div className="flex-1 min-w-0">
+                        {/* Número de cotización — editable por director y asesor,
+                            mismo patrón de edición inline (onBlur) que la
+                            ubicación de los pedidos, arriba. */}
+                        <label className="text-[10px] block" style={{ color: C.textMuted }}>Número de cotización</label>
+                        <input
+                          type="text"
+                          defaultValue={c.numero_cotizacion}
+                          onBlur={(e) => {
+                            if (e.target.value.trim() !== c.numero_cotizacion) {
+                              actualizarNumeroCotizacion(c.id, e.target.value)
+                            }
+                          }}
+                          className="text-sm font-medium px-2 py-1 -ml-2 rounded-lg w-full"
+                          style={{ ...smallInputStyle, color: C.textPrimary, maxWidth: 220 }}
+                        />
+                        <p className="text-xs mt-1 flex items-center gap-1" style={{ color: C.textSecondary }}>
                           ${Number(c.valor_cotizado).toLocaleString('es-CO')} (con IVA) · <IconMapPin size={11} />{c.ubicacion}
                         </p>
                         {c.detalle && <p className="text-xs mt-1" style={{ color: C.textMuted }}>{c.detalle}</p>}
