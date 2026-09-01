@@ -415,14 +415,14 @@ export default function NicoClientes() {
           </div>
         </div>
 
-        {/* Cotización nueva (recotización de un cliente existente) */}
+        {/* Cotización o nuevo pedido (recotización / venta a un cliente existente) */}
         <button
           onClick={() => setModalCotizacionAbierto(true)}
           className="w-full mb-4 rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-1.5"
           style={{ border: `1px dashed ${C.orange}`, color: '#854F0B' }}
         >
           <IconFilePlus size={15} />
-          Cotización nueva
+          Cotización o nuevo pedido
         </button>
 
         <CrearCotizacionModal

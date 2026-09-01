@@ -4,6 +4,7 @@ import { useAuth } from '../lib/AuthContext'
 import { rangoSemana } from '../lib/fechas'
 import HistorialPromedios from '../components/HistorialPromedios'
 import Recaudos from '../components/Recaudos'
+import DetalleVentasModal from '../components/DetalleVentasModal'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -183,6 +184,7 @@ function statsVacias() {
 export default function PerfilAsesor() {
   const { profile } = useAuth()
   const asesorId = profile?.id
+  const [detalleVentasAbierto, setDetalleVentasAbierto] = useState(false)
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
 
   const [cargando, setCargando] = useState(true)
@@ -476,14 +478,27 @@ export default function PerfilAsesor() {
                   {formatoCOP.format(stats.valorSemanaConIva)} con IVA
                 </p>
                 <div className="h-px mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }} />
-                <div className="flex justify-between items-baseline">
+                <button
+                  onClick={() => setDetalleVentasAbierto(true)}
+                  className="w-full flex justify-between items-baseline text-left"
+                  title="Ver detalle de clientes de este mes"
+                >
                   <p className="text-xs" style={{ color: C.orange }}>
                     Este mes
                   </p>
-                  <p className="text-base font-bold text-white">{formatoCOP.format(stats.valorMesSinIva)}</p>
-                </div>
+                  <p className="text-base font-bold text-white underline decoration-dotted">{formatoCOP.format(stats.valorMesSinIva)}</p>
+                </button>
               </section>
             )}
+
+            <DetalleVentasModal
+              abierto={detalleVentasAbierto}
+              onClose={() => setDetalleVentasAbierto(false)}
+              titulo="Ventas de este mes"
+              asesorIds={asesorId ? [asesorId] : []}
+              desde={mes.inicio}
+              hastaExclusivo={mes.finExclusivo}
+            />
 
             {/* Ranking: solo el puesto propio, nunca el orden de los demás.
                 Naranja solo si el puesto es el número 1. Muestra puntos de

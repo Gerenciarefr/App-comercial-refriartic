@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { rangoSemana } from '../lib/fechas'
+import DetalleVentasModal from '../components/DetalleVentasModal'
+import HistorialMensualModal from '../components/HistorialMensualModal'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -232,6 +234,25 @@ export default function NicoResumen() {
   // anteriores (mes/trimestre/año se recalculan también respecto a esa
   // semana, igual que en el perfil de cada asesor).
   const [offsetSemana, setOffsetSemana] = useState(0)
+
+  // Tarjeta de detalle de ventas del mes (cliente / ubicación / valor con IVA)
+  const [detalleVentasAbierto, setDetalleVentasAbierto] = useState(false)
+  const [historialAbierto, setHistorialAbierto] = useState(false)
+
+  // Al entrar al resumen, se "cierra" (congela) automáticamente el mes
+  // calendario anterior si todavía no tenía una foto guardada — así el
+  // historial de "Meses anteriores" queda siempre al día sin que nadie
+  // tenga que acordarse de hacerlo a mano. fn_cerrar_mes no hace nada si
+  // quien llama no es director (lo valida la propia función en la base
+  // de datos), así que es seguro invocarla siempre.
+  useEffect(() => {
+    const hoy = new Date()
+    const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+    const p_mes = mesAnterior.toISOString().slice(0, 10)
+    supabase.rpc('fn_cerrar_mes', { p_mes }).then(({ error }) => {
+      if (error) console.error('No se pudo cerrar el mes anterior:', error.message)
+    })
+  }, [])
 
   const semana = rangoSemana(offsetSemana)
   const mes = rangoMes(semana.inicio)
@@ -600,6 +621,20 @@ export default function NicoResumen() {
           </button>
         </div>
 
+        <button
+          onClick={() => setHistorialAbierto(true)}
+          className="w-full rounded-2xl p-3 text-sm font-medium text-center"
+          style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}`, color: C.navy }}
+        >
+          Ver meses anteriores
+        </button>
+
+        <HistorialMensualModal
+          abierto={historialAbierto}
+          onClose={() => setHistorialAbierto(false)}
+          asesores={asesores}
+        />
+
         {pendientes > 0 && (
           <Link
             to="/aprobar-usuarios"
@@ -638,19 +673,32 @@ export default function NicoResumen() {
                   {formatoCOP.format(combinado.valorSemanaConIva)} con IVA
                 </p>
                 <div className="h-px mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }} />
-                <div className="flex justify-between items-baseline">
+                <button
+                  onClick={() => setDetalleVentasAbierto(true)}
+                  className="w-full flex justify-between items-baseline text-left"
+                  title="Ver detalle de clientes de este mes"
+                >
                   <p className="text-xs" style={{ color: C.orange }}>
                     Este mes
                   </p>
                   <div className="text-right">
-                    <p className="text-base font-bold text-white">{formatoCOP.format(combinado.valorMesSinIva)}</p>
+                    <p className="text-base font-bold text-white underline decoration-dotted">{formatoCOP.format(combinado.valorMesSinIva)}</p>
                     <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
                       {formatoCOP.format(combinado.valorMesConIva)} con IVA
                     </p>
                   </div>
-                </div>
+                </button>
               </section>
             )}
+
+            <DetalleVentasModal
+              abierto={detalleVentasAbierto}
+              onClose={() => setDetalleVentasAbierto(false)}
+              titulo="Ventas de este mes"
+              asesorIds={asesoresSeleccionados}
+              desde={mes.inicio}
+              hastaExclusivo={mes.finExclusivo}
+            />
 
             {/* Ranking de la semana — solo el puesto 1 en naranja */}
             <section>

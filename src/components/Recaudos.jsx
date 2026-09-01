@@ -193,8 +193,8 @@ export default function Recaudos({ asesorId, esDirector = false }) {
     <section>
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="flex items-center gap-1.5">
-          <IconWallet size={14} style={{ color: C.textPrimary }} />
-          <h2 className="text-sm font-semibold" style={{ color: C.textPrimary }}>Recaudos</h2>
+          <IconWallet size={16} style={{ color: C.navy }} />
+          <h2 className="text-base font-extrabold tracking-tight" style={{ color: C.navy }}>PAGOS Y RECAUDOS</h2>
         </span>
         <button
           onClick={() => setModalAbierto(true)}
@@ -202,7 +202,7 @@ export default function Recaudos({ asesorId, esDirector = false }) {
           style={{ backgroundColor: C.orange, color: '#412402' }}
         >
           <IconPlus size={12} />
-          Pago de factura
+          Agregar Recaudo
         </button>
       </div>
 
@@ -418,6 +418,8 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
   const [pedidoManual, setPedidoManual] = useState('')
 
   const [valorTotalManual, setValorTotalManual] = useState('')
+  const [fechaAbono, setFechaAbono] = useState(new Date().toISOString().slice(0, 10))
+  const [valorAbono, setValorAbono] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState(null)
 
@@ -473,14 +475,43 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
       payload.valor_total = Number(valorTotalManual)
     }
 
+    if (!fechaAbono || !valorAbono || Number(valorAbono) <= 0) {
+      return setError('La fecha y el valor del abono son obligatorios.')
+    }
+    const valorTotalRef = modoCliente === 'lista' ? valorTotalLista : Number(valorTotalManual)
+    if (Number(valorAbono) > valorTotalRef) {
+      return setError('El abono no puede ser mayor al valor total de la factura.')
+    }
+
     setGuardando(true)
-    const { error: eInsert } = await supabase.from('pagos_factura').insert(payload)
-    setGuardando(false)
+    const { data: pagoCreado, error: eInsert } = await supabase
+      .from('pagos_factura')
+      .insert(payload)
+      .select()
+      .single()
 
     if (eInsert) {
+      setGuardando(false)
       setError(eInsert.message)
       return
     }
+
+    // El primer abono (1 de hasta 3 posibles) se registra de una vez junto
+    // con el recaudo, para no obligar a un segundo paso — los siguientes
+    // abonos 2 y 3 se agregan luego desde la tarjeta ya creada.
+    const { error: eAbono } = await supabase.from('abonos_factura').insert({
+      pago_id: pagoCreado.id,
+      numero_abono: 1,
+      fecha_abono: fechaAbono,
+      valor_abonado: Number(valorAbono),
+    })
+    setGuardando(false)
+
+    if (eAbono) {
+      setError('El recaudo se creó, pero no se pudo guardar el abono: ' + eAbono.message)
+      return
+    }
+
     onCreado?.()
   }
 
@@ -488,7 +519,7 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
     <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
       <div className="rounded-t-2xl md:rounded-2xl w-full md:max-w-md max-h-[90vh] overflow-y-auto p-4" style={{ backgroundColor: C.card }}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold" style={{ color: C.textPrimary }}>Nuevo pago de factura</h2>
+          <h2 className="text-lg font-bold" style={{ color: C.textPrimary }}>Agregar Recaudo</h2>
           <button onClick={onClose} style={{ color: C.textMuted }}>
             <IconX size={20} />
           </button>
@@ -595,6 +626,35 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
             </>
           )}
 
+          {/* El abono se pide de una vez al crear el recaudo — es el primero
+              de hasta 3 posibles; los otros 2 se agregan después desde la
+              tarjeta del recaudo ya creado. */}
+          <div className="rounded-lg p-2.5 space-y-2" style={{ backgroundColor: '#F4F4F2' }}>
+            <p className="text-xs font-semibold" style={{ color: C.textPrimary }}>¿Cuánto es el abono? (1 de 3)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px]" style={{ color: C.textSecondary }}>Fecha de abono</label>
+                <input
+                  type="date"
+                  value={fechaAbono}
+                  onChange={(e) => setFechaAbono(e.target.value)}
+                  className={inputCls}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label className="text-[11px]" style={{ color: C.textSecondary }}>Valor del abono *</label>
+                <input
+                  type="number"
+                  value={valorAbono}
+                  onChange={(e) => setValorAbono(e.target.value)}
+                  className={inputCls}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          </div>
+
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
@@ -603,7 +663,7 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
             className="w-full text-sm font-medium px-4 py-2.5 rounded-xl disabled:opacity-60"
             style={{ backgroundColor: C.navy, color: '#FFFFFF' }}
           >
-            {guardando ? 'Guardando...' : 'Crear pago de factura'}
+            {guardando ? 'Guardando...' : 'Agregar Recaudo'}
           </button>
         </form>
       </div>

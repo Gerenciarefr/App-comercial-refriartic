@@ -5,6 +5,7 @@ import { rangoSemana } from '../lib/fechas'
 import AvanceMetasPersonal from '../components/AvanceMetasPersonal'
 import HistorialPromedios from '../components/HistorialPromedios'
 import Recaudos from '../components/Recaudos'
+import DetalleVentasModal from '../components/DetalleVentasModal'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -130,6 +131,7 @@ export default function AsesorDetalle() {
   const navigate = useNavigate()
   const [eliminando, setEliminando] = useState(false)
   const [offsetSemana, setOffsetSemana] = useState(0)
+  const [detalleVentasAbierto, setDetalleVentasAbierto] = useState(false)
   const [asesor, setAsesor] = useState(null)
   const [stats, setStats] = useState(null)
   const [misiones, setMisiones] = useState([])
@@ -624,9 +626,19 @@ export default function AsesorDetalle() {
                   semanaConIva={stats.valorSemanaConIva}
                   mesSinIva={stats.valorMesSinIva}
                   mesConIva={stats.valorMesConIva}
+                  onClickMes={() => setDetalleVentasAbierto(true)}
                 />
               </div>
             </section>
+
+            <DetalleVentasModal
+              abierto={detalleVentasAbierto}
+              onClose={() => setDetalleVentasAbierto(false)}
+              titulo="Ventas de este mes"
+              asesorIds={[id]}
+              desde={mes.inicio}
+              hastaExclusivo={mes.finExclusivo}
+            />
 
             <AvanceMetasPersonal asesorId={id} />
 
@@ -752,7 +764,7 @@ function StatCard({ label, semana, mes }) {
 
 // La estadística más importante — se destaca con más tamaño y color propio,
 // igual que la tarjeta de "Valor vendido" en Resumen y Perfil.
-function StatCardValor({ semanaSinIva, semanaConIva, mesSinIva, mesConIva }) {
+function StatCardValor({ semanaSinIva, semanaConIva, mesSinIva, mesConIva, onClickMes }) {
   return (
     <div className="rounded-2xl p-5" style={{ backgroundColor: C.navy }}>
       <p className="text-2xl font-extrabold text-white leading-tight">{formatoCOP.format(semanaSinIva)}</p>
@@ -760,10 +772,12 @@ function StatCardValor({ semanaSinIva, semanaConIva, mesSinIva, mesConIva }) {
         sin IVA · esta semana — {formatoCOP.format(semanaConIva)} con IVA
       </p>
       <div className="h-px my-3" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
-      <p className="text-lg font-bold text-white leading-tight">{formatoCOP.format(mesSinIva)}</p>
-      <p className="text-xs" style={{ color: C.orange }}>
-        sin IVA · este mes — {formatoCOP.format(mesConIva)} con IVA
-      </p>
+      <button onClick={onClickMes} className="text-left w-full" title="Ver detalle de clientes de este mes">
+        <p className="text-lg font-bold text-white leading-tight underline decoration-dotted">{formatoCOP.format(mesSinIva)}</p>
+        <p className="text-xs" style={{ color: C.orange }}>
+          sin IVA · este mes — {formatoCOP.format(mesConIva)} con IVA
+        </p>
+      </button>
     </div>
   )
 }

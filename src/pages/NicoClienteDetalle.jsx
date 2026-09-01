@@ -13,6 +13,7 @@ const C = {
   textPrimary: '#14213D',
   textSecondary: '#5F5E5A',
   textMuted: '#B4B2A9',
+  accentBlue: '#1D6FE0',
 }
 
 const ORIGEN_LABEL = {
@@ -153,6 +154,15 @@ const IconX = (props) => (
     <line x1="6" y1="6" x2="18" y2="18" />
   </IconBase>
 )
+const IconTrash = (props) => (
+  <IconBase {...props}>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </IconBase>
+)
 const IconCheck = (props) => (
   <IconBase {...props}>
     <polyline points="20 6 9 17 4 12" />
@@ -238,6 +248,7 @@ export default function NicoClienteDetalle() {
   const [creandoPedido, setCreandoPedido] = useState(false)
   const [pedidoMsg, setPedidoMsg] = useState(null)
   const [ivaPorcentaje, setIvaPorcentaje] = useState(19)
+  const [eliminandoPedidoId, setEliminandoPedidoId] = useState(null)
 
   const [nuevaOp, setNuevaOp] = useState({})
 
@@ -487,6 +498,57 @@ export default function NicoClienteDetalle() {
       alert('No se pudo actualizar el pedido: ' + error.message)
       return
     }
+    cargarTodo()
+  }
+
+  // Eliminar un pedido — solo el director (la base de datos también lo
+  // exige vía RLS). Al borrarse el pedido, todo lo que dependía de él
+  // (OP libres, misiones automáticas, bodegaje) se limpia primero, y las
+  // cotizaciones/recaudos que lo referenciaban quedan sin amarrar pero no
+  // se borran. Como todos los totales y estadísticas de la plataforma se
+  // calculan en vivo a partir de order_ops, desaparecen del conteo de
+  // inmediato al recargar.
+  const eliminarPedido = async (pedido) => {
+    if (!esDirector) return
+    const ok = confirm(
+      `¿Eliminar por completo el pedido ${pedido.numero_pedido}? Esto también borra sus OP y misiones asociadas, y no se puede deshacer.`
+    )
+    if (!ok) return
+
+    setEliminandoPedidoId(pedido.id)
+
+    const { error: eOps } = await supabase.from('pedido_ops').delete().eq('order_op_id', pedido.id)
+    if (eOps) {
+      setEliminandoPedidoId(null)
+      alert('No se pudo eliminar el pedido: ' + eOps.message)
+      return
+    }
+
+    const { error: eTareas } = await supabase.from('automated_tasks').delete().eq('op_id', pedido.id)
+    if (eTareas) {
+      setEliminandoPedidoId(null)
+      alert('No se pudo eliminar el pedido: ' + eTareas.message)
+      return
+    }
+
+    const { error: eBodegaje } = await supabase.from('bodegaje').delete().eq('order_op_id', pedido.id)
+    if (eBodegaje) {
+      setEliminandoPedidoId(null)
+      alert('No se pudo eliminar el pedido: ' + eBodegaje.message)
+      return
+    }
+
+    await supabase.from('cotizaciones_clientes').update({ order_op_id: null }).eq('order_op_id', pedido.id)
+    await supabase.from('pagos_factura').update({ order_op_id: null }).eq('order_op_id', pedido.id)
+
+    const { error: ePedido } = await supabase.from('order_ops').delete().eq('id', pedido.id)
+    setEliminandoPedidoId(null)
+
+    if (ePedido) {
+      alert('No se pudo eliminar el pedido: ' + ePedido.message)
+      return
+    }
+
     cargarTodo()
   }
 
@@ -1010,18 +1072,66 @@ export default function NicoClienteDetalle() {
                         {esEntregado ? `Entregado: ${fmtFecha(p.fecha_entrega)} — pedido cerrado` : `Entrega planeada: ${fmtFecha(p.fecha_entrega)}`}
                       </p>
                     </div>
-                    <span
-                      className="text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap"
-                      style={{ backgroundColor: info.bg, color: info.text }}
-                    >
-                      {info.label}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className="text-[11px] font-medium px-2.5 py-1 rounded-full whitespace-nowrap"
+                        style={{ backgroundColor: info.bg, color: info.text }}
+                      >
+                        {info.label}
+                      </span>
+                      {esDirector && (
+                        <button
+                          onClick={() => eliminarPedido(p)}
+                          disabled={eliminandoPedidoId === p.id}
+                          title="Eliminar pedido"
+                          className="p-1 rounded-lg disabled:opacity-50"
+                          style={{ color: '#A32D2D' }}
+                        >
+                          <IconTrash size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="mt-2 text-xs flex gap-3" style={{ color: C.textSecondary }}>
-                    {p.valor_sin_iva ? <span>Sin IVA: ${Number(p.valor_sin_iva).toLocaleString('es-CO')}</span> : null}
-                    {p.valor_con_iva ? <span>Con IVA: ${Number(p.valor_con_iva).toLocaleString('es-CO')}</span> : null}
-                  </div>
+                  {esDirector ? (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px]" style={{ color: C.textSecondary }}>Valor sin IVA</label>
+                        <input
+                          type="number"
+                          defaultValue={p.valor_sin_iva || ''}
+                          onBlur={(e) => {
+                            const nuevo = e.target.value === '' ? null : Number(e.target.value)
+                            if (nuevo !== (p.valor_sin_iva ?? null)) {
+                              actualizarPedido(p.id, { valor_sin_iva: nuevo })
+                            }
+                          }}
+                          className="px-2 py-1 text-xs w-full"
+                          style={smallInputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px]" style={{ color: C.textSecondary }}>Valor con IVA</label>
+                        <input
+                          type="number"
+                          defaultValue={p.valor_con_iva || ''}
+                          onBlur={(e) => {
+                            const nuevo = e.target.value === '' ? null : Number(e.target.value)
+                            if (nuevo !== (p.valor_con_iva ?? null)) {
+                              actualizarPedido(p.id, { valor_con_iva: nuevo })
+                            }
+                          }}
+                          className="px-2 py-1 text-xs w-full"
+                          style={smallInputStyle}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs flex gap-3" style={{ color: C.textSecondary }}>
+                      {p.valor_sin_iva ? <span>Sin IVA: ${Number(p.valor_sin_iva).toLocaleString('es-CO')}</span> : null}
+                      {p.valor_con_iva ? <span>Con IVA: ${Number(p.valor_con_iva).toLocaleString('es-CO')}</span> : null}
+                    </div>
+                  )}
 
                   <p className="mt-1 text-xs flex items-center gap-1" style={{ color: C.textSecondary }}>
                     <IconMapPin size={11} />
@@ -1030,7 +1140,7 @@ export default function NicoClienteDetalle() {
 
                   {!esEntregado && (
                     <div className="mt-2 flex items-center gap-2">
-                      <label className="text-xs" style={{ color: C.textSecondary }}>Ubicación:</label>
+                      <label className="text-xs font-medium" style={{ color: C.accentBlue }}>Ubicación:</label>
                       <input
                         type="text"
                         defaultValue={p.ubicacion_entrega || ''}
@@ -1047,7 +1157,7 @@ export default function NicoClienteDetalle() {
 
                   {!esEntregado && (
                     <div className="mt-2 flex items-center gap-2">
-                      <label className="text-xs" style={{ color: C.textSecondary }}>Cambiar fecha de entrega:</label>
+                      <label className="text-xs font-medium" style={{ color: C.accentBlue }}>Cambiar fecha de entrega:</label>
                       <input
                         type="date"
                         defaultValue={p.fecha_entrega ? p.fecha_entrega.slice(0, 10) : ''}
@@ -1064,7 +1174,7 @@ export default function NicoClienteDetalle() {
 
                   {/* OP libres */}
                   <div className="mt-3">
-                    <p className="text-xs mb-1" style={{ color: C.textSecondary }}>OP de este pedido</p>
+                    <p className="text-xs font-medium mb-1" style={{ color: C.accentBlue }}>OP de este pedido</p>
                     <div className="flex flex-wrap gap-1 mb-2">
                       {ops.map((o) => (
                         <span
@@ -1233,73 +1343,10 @@ export default function NicoClienteDetalle() {
             })}
           </div>
 
-          {/* Nuevo pedido */}
-          <form onSubmit={crearPedido} className="pt-3 space-y-2" style={{ borderTop: `0.5px solid ${C.border}` }}>
-            <p className="text-xs font-semibold flex items-center gap-1" style={{ color: C.textSecondary }}>
-              <IconPlus size={12} />
-              Nuevo pedido
-            </p>
-            <p className="text-xs" style={{ color: C.textMuted }}>IVA vigente: {ivaPorcentaje}% (se puede cambiar en Ajustes)</p>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                placeholder="Número de pedido *"
-                value={nuevoPedido.numero_pedido}
-                onChange={(e) => setNuevoPedido((prev) => ({ ...prev, numero_pedido: e.target.value }))}
-                className={inputCls}
-                style={inputStyle}
-              />
-              <input
-                type="date"
-                placeholder="Fecha de entrega *"
-                value={nuevoPedido.fecha_entrega}
-                onChange={(e) => setNuevoPedido((prev) => ({ ...prev, fecha_entrega: e.target.value }))}
-                className={inputCls}
-                style={inputStyle}
-              />
-              <input
-                type="text"
-                placeholder="Ubicación de entrega"
-                value={nuevoPedido.ubicacion_entrega}
-                onChange={(e) => setNuevoPedido((prev) => ({ ...prev, ubicacion_entrega: e.target.value }))}
-                className={`${inputCls} col-span-2`}
-                style={inputStyle}
-              />
-              <input
-                type="number"
-                placeholder="Valor sin IVA *"
-                value={nuevoPedido.valor_sin_iva}
-                onChange={(e) => {
-                  const sinIva = e.target.value
-                  const conIva = sinIva === '' ? '' : (Number(sinIva) * (1 + ivaPorcentaje / 100)).toFixed(0)
-                  setNuevoPedido((prev) => ({ ...prev, valor_sin_iva: sinIva, valor_con_iva: conIva }))
-                }}
-                className={inputCls}
-                style={inputStyle}
-              />
-              <input
-                type="number"
-                placeholder="Valor con IVA"
-                value={nuevoPedido.valor_con_iva}
-                onChange={(e) => setNuevoPedido((prev) => ({ ...prev, valor_con_iva: e.target.value }))}
-                className={inputCls}
-                style={inputStyle}
-              />
-            </div>
-            {pedidoMsg && (
-              <p className={`text-sm ${pedidoMsg.tipo === 'error' ? 'text-red-600' : ''}`} style={pedidoMsg.tipo === 'ok' ? { color: '#0F6E56' } : undefined}>
-                {pedidoMsg.texto}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={creandoPedido}
-              className="text-sm font-medium px-4 py-2 rounded-xl disabled:opacity-60"
-              style={{ backgroundColor: C.navy, color: '#FFFFFF' }}
-            >
-              {creandoPedido ? 'Creando...' : 'Crear pedido'}
-            </button>
-          </form>
+          {/* El alta manual de "Nuevo pedido" se retiró de aquí: ahora todo
+              pedido nace de una cotización aceptada (botón "Cotización o
+              nuevo pedido" en la lista de Clientes), para que la platafor-
+              ma tenga un único camino de entrada y no se dupliquen datos. */}
         </div>
 
         {/* Cotizaciones (recotización) */}
