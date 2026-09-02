@@ -126,7 +126,9 @@ export default function HistorialMensualModal({ abierto, onClose, asesores = [] 
                 <button onClick={() => toggleMes(f.mes)} className="w-full flex items-center justify-between p-3">
                   <div className="text-left">
                     <p className="text-sm font-semibold" style={{ color: C.textPrimary }}>{etiquetaMes(f.mes)}</p>
-                    <p className="text-xs" style={{ color: C.textMuted }}>{f.ventas_count} {f.ventas_count === 1 ? 'venta' : 'ventas'}</p>
+                    <p className="text-xs" style={{ color: C.textMuted }}>
+                      {f.ventas_count} {f.ventas_count === 1 ? 'venta' : 'ventas'} · {f.llamadas_count || 0} {f.llamadas_count === 1 ? 'llamada' : 'llamadas'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">

@@ -145,6 +145,12 @@ const IconUsers = (props) => (
   </IconBase>
 )
 
+const IconWallet = (props) => (
+  <IconBase {...props}>
+    <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5h-4a2 2 0 0 1 0-4h4Z" />
+  </IconBase>
+)
+
 function rangoMes(fechaReferencia) {
   const ref = new Date(fechaReferencia)
   const inicio = new Date(ref.getFullYear(), ref.getMonth(), 1)
@@ -255,9 +261,16 @@ export default function NicoResumen() {
   }, [])
 
   const semana = rangoSemana(offsetSemana)
-  const mes = rangoMes(semana.inicio)
-  const trimestre = rangoTrimestre(semana.inicio)
-  const anio = rangoAnio(semana.inicio)
+  // Mes/trimestre/año se recalculan en función de la semana elegida SOLO
+  // cuando se navega a una semana pasada (para poder comparar un periodo
+  // histórico completo). En la semana actual (offset 0) siempre se usa la
+  // fecha real de hoy — si no, cuando la semana en curso cruza dos meses
+  // (p. ej. empieza el 31 de agosto), el resumen seguía marcando el mes
+  // anterior aunque ya hubiera arrancado el nuevo mes.
+  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : semana.inicio
+  const mes = rangoMes(referenciaPeriodo)
+  const trimestre = rangoTrimestre(referenciaPeriodo)
+  const anio = rangoAnio(referenciaPeriodo)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -906,6 +919,33 @@ export default function NicoResumen() {
                       semana={formatoCOP.format(combinado.recaudoSemana)}
                       mes={formatoCOP.format(combinado.recaudoMes)}
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* Recaudos de todos los asesores — solo para visualizar de un
+                  vistazo quién ha recaudado qué este mes, sin tener que
+                  entrar al perfil de cada uno. */}
+              {mostrar('ventas') && (
+                <div>
+                  <SectionTitle icon={<IconWallet size={14} style={{ color: C.textPrimary }} />} texto="Recaudos por asesor — este mes" />
+                  <div className="rounded-2xl p-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
+                    {asesores.length === 0 ? (
+                      <p className="text-sm" style={{ color: C.textMuted }}>Sin asesores activos.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {[...asesores]
+                          .sort((a, b) => (statsPorAsesor[b.id]?.recaudoMes || 0) - (statsPorAsesor[a.id]?.recaudoMes || 0))
+                          .map((a) => (
+                            <div key={a.id} className="flex justify-between items-center text-sm">
+                              <span style={{ color: C.textSecondary }}>{a.full_name || a.nombre}</span>
+                              <span className="font-semibold" style={{ color: C.textPrimary }}>
+                                {formatoCOP.format(statsPorAsesor[a.id]?.recaudoMes || 0)}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

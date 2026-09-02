@@ -145,7 +145,12 @@ export default function AsesorDetalle() {
   const [guardarMsg, setGuardarMsg] = useState(null)
 
   const semana = rangoSemana(offsetSemana)
-  const mes = rangoMes(semana.inicio)
+  // Igual que en el resumen del director: en la semana actual (offset 0)
+  // el mes se calcula sobre la fecha real de hoy, no sobre el inicio de
+  // la semana, para que no siga marcando el mes anterior cuando la semana
+  // en curso cruza dos meses.
+  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : semana.inicio
+  const mes = rangoMes(referenciaPeriodo)
 
   useEffect(() => {
     const cargar = async () => {

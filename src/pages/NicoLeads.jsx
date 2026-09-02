@@ -796,7 +796,7 @@ export default function NicoLeads() {
               )}
 
               <div>
-                <label className="text-xs" style={{ color: C.textSecondary }}>Otros detalles</label>
+                <label className="text-xs" style={{ color: C.textSecondary }}>Notas iniciales</label>
                 <textarea
                   value={form.notas_diagnostico}
                   onChange={(e) => cambiarForm('notas_diagnostico', e.target.value)}

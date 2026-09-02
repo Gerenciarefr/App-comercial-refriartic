@@ -678,7 +678,7 @@ export default function HojaDeRuta() {
 
         {/* Cuadrícula */}
         <div className="rounded-2xl p-2" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
-          <div className="grid grid-cols-7 text-center text-[10px] font-semibold mb-1" style={{ color: C.textMuted }}>
+          <div className="grid grid-cols-7 text-center text-[10px] font-normal mb-1" style={{ color: C.textMuted }}>
             {DIAS_SEMANA.map((d) => (
               <div key={d} className="py-1">
                 {d}
@@ -709,7 +709,7 @@ export default function HojaDeRuta() {
                     }}
                   >
                     {notaPico && <IconBan size={10} style={{ position: 'absolute', top: 4, right: 4, color: '#A32D2D' }} />}
-                    <p className="text-[11px] font-semibold" style={{ color: esHoy ? C.navy : C.textSecondary }}>{dia.getDate()}</p>
+                    <p className="text-[11px] font-normal" style={{ color: esHoy ? C.navy : C.textSecondary }}>{dia.getDate()}</p>
                     <div className="flex flex-wrap gap-0.5 mt-1">
                       {Object.entries(conteos).map(([grupo, n]) => (
                         <span
@@ -786,14 +786,17 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
     onClose()
   }
 
-  // Reprogramar una misión manual a cualquier otra fecha, desde su propia
-  // tarjeta en la Hoja de Ruta. Disponible para el asesor asignado y el
-  // director (mismo criterio que "marcar cumplida").
+  // Reprogramar una misión a cualquier otra fecha, desde su propia tarjeta
+  // en la Hoja de Ruta. Disponible para el asesor asignado y el director
+  // (mismo criterio que "marcar cumplida"). Sirve tanto para misiones
+  // manuales como para la automática "Confirmar entrega", que es la única
+  // automática que se puede mover libremente (las demás nacen de reglas
+  // fijas del negocio y no tiene sentido moverlas a mano).
   const reprogramarManual = async (mision, nuevaFechaStr) => {
     if (!nuevaFechaStr) return
     setReprogramando(mision.id)
     const { error } = await supabase
-      .from('manual_tasks')
+      .from(mision.tabla)
       .update({ fecha_programada: nuevaFechaStr })
       .eq('id', mision.idOriginal)
     setReprogramando(null)
@@ -804,6 +807,9 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
     onReprogramada?.()
     onClose()
   }
+
+  const puedeMoverFecha = (mision) =>
+    puedeReprogramar(mision) && (mision.tabla === 'manual_tasks' || (mision.tabla === 'automated_tasks' && mision.tipoOriginal === 'confirmar_entrega'))
 
   const puedeReprogramar = (mision) => esDirector || mision.asesor_id === profile?.id
 
@@ -987,7 +993,7 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
     <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
       <div className="rounded-t-2xl md:rounded-2xl w-full md:max-w-lg max-h-[85vh] overflow-y-auto p-4" style={{ backgroundColor: C.card }}>
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-base font-bold capitalize" style={{ color: C.textPrimary }}>
+          <h2 className="text-base font-normal capitalize" style={{ color: C.textPrimary }}>
             {fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
           </h2>
           <button onClick={onClose} style={{ color: C.textMuted }}>
@@ -1207,9 +1213,10 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                         </div>
                       )}
 
-                      {/* Reprogramar misión manual a otra fecha — visible para el
-                          asesor asignado y para el director. */}
-                      {!datos?.cargando && m.tabla === 'manual_tasks' && puedeReprogramar(m) && (
+                      {/* Reprogramar misión a otra fecha — visible para el asesor
+                          asignado y para el director. Sirve para misiones
+                          manuales y para la automática "Confirmar entrega". */}
+                      {!datos?.cargando && puedeMoverFecha(m) && (
                         <div onClick={(e) => e.stopPropagation()}>
                           <label className="text-[11px] flex items-center gap-1 mb-1" style={{ color: C.textSecondary }}>
                             <IconCalendar size={11} />

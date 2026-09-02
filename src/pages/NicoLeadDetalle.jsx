@@ -77,14 +77,13 @@ const CAMPOS_VACIOS = {
   telefono_2: '',
   email: '',
   ciudad: '',
-  notas_diagnostico: '',
   requiere_visita: false,
   fecha_visita: '',
   valor_cotizado: '',
-  notas_cotizacion: '',
   codigo_cotizacion: '',
   asesor_id: '',
   origen: '',
+  notas_diagnostico: '',
 }
 
 // --- Íconos SVG minimalistas (sin dependencias externas) ---
@@ -200,14 +199,13 @@ export default function NicoLeadDetalle() {
       telefono_2: leadRes.data.telefono_2 || '',
       email: leadRes.data.email || '',
       ciudad: leadRes.data.ciudad || '',
-      notas_diagnostico: leadRes.data.notas_diagnostico || '',
       requiere_visita: !!leadRes.data.requiere_visita,
       fecha_visita: leadRes.data.fecha_visita ? leadRes.data.fecha_visita.slice(0, 10) : '',
       valor_cotizado: leadRes.data.valor_cotizado ?? '',
-      notas_cotizacion: leadRes.data.notas_cotizacion || '',
       codigo_cotizacion: leadRes.data.codigo_cotizacion || '',
       asesor_id: leadRes.data.asesor_id || '',
       origen: leadRes.data.origen || '',
+      notas_diagnostico: leadRes.data.notas_diagnostico || '',
     })
     setNuevoEstado(leadRes.data.estado || '')
 
@@ -314,14 +312,13 @@ export default function NicoLeadDetalle() {
       telefono_2: form.telefono_2.trim() || null,
       email: form.email.trim() || null,
       ciudad: form.ciudad.trim() || null,
-      notas_diagnostico: form.notas_diagnostico.trim() || null,
       requiere_visita: form.requiere_visita,
       fecha_visita: form.requiere_visita ? form.fecha_visita : null,
       valor_cotizado: form.valor_cotizado === '' ? null : Number(form.valor_cotizado),
-      notas_cotizacion: form.notas_cotizacion.trim() || null,
       codigo_cotizacion: form.codigo_cotizacion.trim() || null,
       asesor_id: form.asesor_id || null,
       origen: form.origen || null,
+      notas_diagnostico: form.notas_diagnostico.trim() || null,
       estado: nuevoEstado,
     }
 
@@ -685,28 +682,6 @@ export default function NicoLeadDetalle() {
           </div>
 
           <div>
-            <label className="text-xs" style={{ color: C.textSecondary }}>Notas de diagnóstico</label>
-            <textarea
-              value={form.notas_diagnostico}
-              onChange={(e) => cambiarForm('notas_diagnostico', e.target.value)}
-              rows={3}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs" style={{ color: C.textSecondary }}>Notas de cotización</label>
-            <textarea
-              value={form.notas_cotizacion}
-              onChange={(e) => cambiarForm('notas_cotizacion', e.target.value)}
-              rows={2}
-              className={inputCls}
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
             <label className="text-xs" style={{ color: C.textSecondary }}>
               Código de cotización (obligatorio para "Cotización formal")
             </label>
@@ -715,6 +690,20 @@ export default function NicoLeadDetalle() {
               value={form.codigo_cotizacion}
               onChange={(e) => cambiarForm('codigo_cotizacion', e.target.value)}
               placeholder="Ej: COT-2026-014"
+              className={inputCls}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Notas iniciales — de último a propósito: es la información de
+              contexto que se toma al primer contacto, no algo que se
+              consulte a cada rato como los demás campos. */}
+          <div>
+            <label className="text-xs" style={{ color: C.textSecondary }}>Notas iniciales</label>
+            <textarea
+              value={form.notas_diagnostico}
+              onChange={(e) => cambiarForm('notas_diagnostico', e.target.value)}
+              rows={3}
               className={inputCls}
               style={inputStyle}
             />

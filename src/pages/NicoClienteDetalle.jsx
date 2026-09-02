@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 
@@ -222,6 +222,8 @@ const smallInputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimar
 
 export default function NicoClienteDetalle() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const [eliminandoCliente, setEliminandoCliente] = useState(false)
   const { profile } = useAuth()
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
 
@@ -249,6 +251,7 @@ export default function NicoClienteDetalle() {
   const [pedidoMsg, setPedidoMsg] = useState(null)
   const [ivaPorcentaje, setIvaPorcentaje] = useState(19)
   const [eliminandoPedidoId, setEliminandoPedidoId] = useState(null)
+  const [editandoValorId, setEditandoValorId] = useState(null)
 
   const [nuevaOp, setNuevaOp] = useState({})
 
@@ -499,6 +502,29 @@ export default function NicoClienteDetalle() {
       return
     }
     cargarTodo()
+  }
+
+  // Eliminar el cliente por completo — solo el director. Toda la limpieza
+  // en cascada (pedidos, OP, misiones, bodegaje, recaudos, cotizaciones)
+  // ocurre en una sola transacción dentro de fn_eliminar_cliente, para no
+  // dejar nada huérfano si algo falla a mitad de camino.
+  const eliminarCliente = async () => {
+    if (!esDirector || !cliente) return
+    const ok = confirm(
+      `¿Eliminar por completo al cliente "${cliente.empresa || cliente.nombre_contacto}"? Esto borra también todos sus pedidos, recaudos, cotizaciones y misiones. Esta acción no se puede deshacer.`
+    )
+    if (!ok) return
+
+    setEliminandoCliente(true)
+    const { error } = await supabase.rpc('fn_eliminar_cliente', { p_client_id: id })
+    setEliminandoCliente(false)
+
+    if (error) {
+      alert('No se pudo eliminar el cliente: ' + error.message)
+      return
+    }
+
+    navigate('/clientes', { replace: true })
   }
 
   // Eliminar un pedido — solo el director (la base de datos también lo
@@ -1071,6 +1097,12 @@ export default function NicoClienteDetalle() {
                       <p className="text-xs" style={{ color: C.textMuted }}>
                         {esEntregado ? `Entregado: ${fmtFecha(p.fecha_entrega)} — pedido cerrado` : `Entrega planeada: ${fmtFecha(p.fecha_entrega)}`}
                       </p>
+                      {(!p.fecha_entrega || ops.length === 0) && (
+                        <p className="text-[11px] mt-1 font-medium flex items-center gap-1" style={{ color: '#A32D2D' }}>
+                          <IconAlertTriangle size={11} />
+                          Completar información importante
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span
@@ -1079,6 +1111,16 @@ export default function NicoClienteDetalle() {
                       >
                         {info.label}
                       </span>
+                      {esDirector && (
+                        <button
+                          onClick={() => setEditandoValorId(editandoValorId === p.id ? null : p.id)}
+                          title="Editar valor"
+                          className="p-1 rounded-lg"
+                          style={{ color: C.navy }}
+                        >
+                          <IconEdit size={13} />
+                        </button>
+                      )}
                       {esDirector && (
                         <button
                           onClick={() => eliminarPedido(p)}
@@ -1093,7 +1135,7 @@ export default function NicoClienteDetalle() {
                     </div>
                   </div>
 
-                  {esDirector ? (
+                  {esDirector && editandoValorId === p.id ? (
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-[11px]" style={{ color: C.textSecondary }}>Valor sin IVA</label>
@@ -1551,6 +1593,17 @@ export default function NicoClienteDetalle() {
               </div>
             </div>
           </div>
+        )}
+
+        {esDirector && (
+          <button
+            onClick={eliminarCliente}
+            disabled={eliminandoCliente}
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-xl mt-4 disabled:opacity-60"
+            style={{ border: '1px solid #F5C6C6', color: '#A32D2D', backgroundColor: '#FCEBEB' }}
+          >
+            {eliminandoCliente ? 'Eliminando...' : 'Eliminar cliente'}
+          </button>
         )}
 
         {tarjetaAbierta && (

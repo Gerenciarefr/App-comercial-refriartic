@@ -203,9 +203,13 @@ export default function PerfilAsesor() {
   const [periodoMetas, setPeriodoMetas] = useState('mensual')
 
   const semana = rangoSemana(0)
-  const mes = rangoMes(semana.inicio)
-  const trimestre = rangoTrimestre(semana.inicio)
-  const anio = rangoAnio(semana.inicio)
+  // Mes/trimestre/año siempre sobre la fecha real de hoy (no sobre el
+  // inicio de la semana) — si no, cuando la semana en curso cruza dos
+  // meses, el resumen del asesor seguía marcando el mes anterior.
+  const hoyIso = new Date().toISOString()
+  const mes = rangoMes(hoyIso)
+  const trimestre = rangoTrimestre(hoyIso)
+  const anio = rangoAnio(hoyIso)
 
   const cargar = useCallback(async () => {
     if (!asesorId) return
