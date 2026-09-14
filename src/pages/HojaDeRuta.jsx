@@ -161,14 +161,6 @@ function grupoDeManual(m) {
   return 'gestion'
 }
 
-// Solo prospección de asesor queda como burbuja directa del lead — la
-// llamada entrante ahora se crea como automated_task ('llamada_entrante')
-// para poder marcarse como completada y llevar WhatsApp/mensajes propios.
-function grupoDeLead(origen) {
-  if (origen === 'prospeccion_asesor') return 'gestion'
-  return null
-}
-
 // ---------------------------------------------------------------------------
 // Helpers de fecha (mismo criterio lunes-domingo que fechas.js)
 // ---------------------------------------------------------------------------
@@ -487,26 +479,6 @@ export default function HojaDeRuta() {
         tabla: 'manual_tasks',
         idOriginal: t.id,
         mostrarEnEntregas: !!t.mostrar_en_entregas,
-      })
-    })
-    ;(leadsRes.data || []).forEach((l) => {
-      const grupo = grupoDeLead(l.origen)
-      if (!grupo) return
-      agregar(l.created_at, {
-        id: `lead-${l.id}`,
-        origenTarea: 'lead',
-        grupo,
-        tipoOriginal: null,
-        titulo: 'Prospección de asesor',
-        cliente: l.nombre_contacto || null,
-        empresa: l.empresa || null,
-        hora: null,
-        cumplida: !!l.completado_at,
-        asesor_id: l.asesor_id,
-        lead_id: l.id,
-        client_id: null,
-        tabla: 'leads',
-        idOriginal: l.id,
       })
     })
 
