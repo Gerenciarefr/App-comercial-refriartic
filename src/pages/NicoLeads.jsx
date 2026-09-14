@@ -342,6 +342,8 @@ export default function NicoLeads() {
   const [filtroAsesor, setFiltroAsesor] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroOrigen, setFiltroOrigen] = useState('')
+  const [filtroCiudad, setFiltroCiudad] = useState('')
+  const [ciudades, setCiudades] = useState([])
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
 
@@ -368,6 +370,23 @@ export default function NicoLeads() {
     if (!error) setAsesores(data || [])
   }, [])
 
+  // Punto 9: ciudades ya existentes en los leads, para el desplegable de
+  // filtro (no se escriben a mano, se listan las que ya hay registradas).
+  const cargarCiudades = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('ciudad')
+      .not('ciudad', 'is', null)
+      .neq('ciudad', '')
+
+    if (!error) {
+      const unicas = [...new Set((data || []).map((r) => r.ciudad.trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, 'es')
+      )
+      setCiudades(unicas)
+    }
+  }, [])
+
   const cargarLeads = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -388,6 +407,7 @@ export default function NicoLeads() {
       query = query.neq('estado', 'venta_hecha')
     }
     if (filtroOrigen) query = query.eq('origen', filtroOrigen)
+    if (filtroCiudad) query = query.eq('ciudad', filtroCiudad)
     if (fechaDesde) query = query.gte('created_at', `${fechaDesde}T00:00:00`)
     if (fechaHasta) query = query.lte('created_at', `${fechaHasta}T23:59:59`)
 
@@ -407,11 +427,12 @@ export default function NicoLeads() {
       setLeads(data || [])
     }
     setLoading(false)
-  }, [esDirector, profile, filtroAsesor, filtroEstado, filtroOrigen, fechaDesde, fechaHasta, busqueda])
+  }, [esDirector, profile, filtroAsesor, filtroEstado, filtroOrigen, filtroCiudad, fechaDesde, fechaHasta, busqueda])
 
   useEffect(() => {
     cargarAsesores()
-  }, [cargarAsesores])
+    cargarCiudades()
+  }, [cargarAsesores, cargarCiudades])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -437,6 +458,7 @@ export default function NicoLeads() {
     setFiltroAsesor('')
     setFiltroEstado('')
     setFiltroOrigen('')
+    setFiltroCiudad('')
     setFechaDesde('')
     setFechaHasta('')
   }
@@ -551,7 +573,7 @@ export default function NicoLeads() {
             />
           </div>
 
-          <div className={`grid grid-cols-2 ${esDirector ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-2`}>
+          <div className={`grid grid-cols-2 ${esDirector ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-2`}>
             {esDirector && (
               <select
                 value={filtroAsesor}
@@ -592,6 +614,22 @@ export default function NicoLeads() {
               {ORIGENES.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Punto 9: filtro por ciudad — desplegable con las ciudades que
+                ya existen en los leads registrados. */}
+            <select
+              value={filtroCiudad}
+              onChange={(e) => setFiltroCiudad(e.target.value)}
+              className={inputCls}
+              style={inputStyle}
+            >
+              <option value="">Todas las ciudades</option>
+              {ciudades.map((c) => (
+                <option key={c} value={c}>
+                  {c}
                 </option>
               ))}
             </select>

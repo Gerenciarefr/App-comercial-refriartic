@@ -263,12 +263,29 @@ export default function NicoLeadDetalle() {
       return
     }
 
-    if (nuevoEstado === 'cotizacion_formal' && !form.codigo_cotizacion.trim()) {
+    if (nuevoEstado === 'cotizacion_informal' && (!form.valor_cotizado || Number(form.valor_cotizado) <= 0)) {
       setFormMsg({
         tipo: 'error',
-        texto: 'El código de cotización es obligatorio para pasar a Cotización formal.',
+        texto: 'El valor cotizado es obligatorio para pasar a Cotización informal.',
       })
       return
+    }
+
+    if (nuevoEstado === 'cotizacion_formal') {
+      if (!form.codigo_cotizacion.trim()) {
+        setFormMsg({
+          tipo: 'error',
+          texto: 'El código de cotización es obligatorio para pasar a Cotización formal.',
+        })
+        return
+      }
+      if (!form.valor_cotizado || Number(form.valor_cotizado) <= 0) {
+        setFormMsg({
+          tipo: 'error',
+          texto: 'El valor cotizado es obligatorio para pasar a Cotización formal.',
+        })
+        return
+      }
     }
 
     if (form.requiere_visita && !form.fecha_visita) {

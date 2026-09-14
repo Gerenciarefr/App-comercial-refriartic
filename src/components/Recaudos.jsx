@@ -438,12 +438,20 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
       setPedidoId('')
       return
     }
-    supabase
-      .from('order_ops')
-      .select('id, numero_pedido, valor_con_iva')
-      .eq('client_id', clienteId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setPedidos(data || []))
+    // Punto 4: 1 pedido = 1 recaudo. Se excluyen del desplegable los pedidos
+    // que ya tienen un pago de factura asociado, para no poder duplicarlos
+    // (además queda protegido a nivel de base de datos).
+    Promise.all([
+      supabase
+        .from('order_ops')
+        .select('id, numero_pedido, valor_con_iva')
+        .eq('client_id', clienteId)
+        .order('created_at', { ascending: false }),
+      supabase.from('pagos_factura').select('order_op_id').not('order_op_id', 'is', null),
+    ]).then(([{ data: ops }, { data: pagosConPedido }]) => {
+      const pedidosYaCobrados = new Set((pagosConPedido || []).map((p) => p.order_op_id))
+      setPedidos((ops || []).filter((o) => !pedidosYaCobrados.has(o.id)))
+    })
   }, [modoCliente, clienteId])
 
   // En modo "lista" el valor total no se digita: se toma del valor con IVA
@@ -492,7 +500,13 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
 
     if (eInsert) {
       setGuardando(false)
-      setError(eInsert.message)
+      // Código 23505 = violación de restricción única (alguien más ya
+      // registró un recaudo para este mismo pedido momentos antes).
+      if (eInsert.code === '23505') {
+        setError('Este pedido ya tiene un recaudo registrado. Actualiza la lista de pedidos e intenta de nuevo.')
+      } else {
+        setError(eInsert.message)
+      }
       return
     }
 
@@ -580,7 +594,9 @@ function NuevoPagoModal({ asesorId, onClose, onCreado }) {
                   ))}
                 </select>
                 {clienteId && pedidos.length === 0 && (
-                  <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>Este cliente todavía no tiene pedidos registrados.</p>
+                  <p className="text-[11px] mt-1" style={{ color: C.textMuted }}>
+                    Este cliente no tiene pedidos disponibles para recaudo (no tiene pedidos registrados, o todos sus pedidos ya tienen un recaudo asociado).
+                  </p>
                 )}
               </div>
               {pedidoSeleccionado && (

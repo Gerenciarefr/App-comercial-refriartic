@@ -392,7 +392,10 @@ export default function HojaDeRuta() {
     const inicioStr = aYMD(rango.inicio)
     const finStr = aYMD(rango.fin)
 
-    const [autoRes, manualRes, leadsRes, picoPlacaRes] = await Promise.all([
+    // Punto 3 (actualización): los leads con origen "Prospección de asesor" ya
+    // NO generan una misión virtual automática en el calendario. Se dejó de
+    // consultar la tabla leads para este propósito.
+    const [autoRes, manualRes, picoPlacaRes] = await Promise.all([
       supabase
         .from('automated_tasks')
         .select('id, asesor_id, lead_id, client_id, op_id, tipo, fecha_programada, hora_programada, completado_at, mensaje_sugerido')
@@ -405,13 +408,6 @@ export default function HojaDeRuta() {
         .in('asesor_id', asesoresVisibles)
         .gte('fecha_programada', inicioStr)
         .lte('fecha_programada', finStr),
-      supabase
-        .from('leads')
-        .select('id, asesor_id, empresa, nombre_contacto, origen, created_at, completado_at')
-        .in('asesor_id', asesoresVisibles)
-        .in('origen', ['prospeccion_asesor'])
-        .gte('created_at', inicioStr)
-        .lte('created_at', finStr + 'T23:59:59'),
       supabase.from('dias_pico_placa').select('fecha, nota').gte('fecha', inicioStr).lte('fecha', finStr),
     ])
 

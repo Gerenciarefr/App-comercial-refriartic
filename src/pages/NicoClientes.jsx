@@ -180,6 +180,8 @@ export default function NicoClientes() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroAsesor, setFiltroAsesor] = useState('')
   const [filtroEstadoEntrega, setFiltroEstadoEntrega] = useState('')
+  const [filtroCiudad, setFiltroCiudad] = useState('')
+  const [ciudades, setCiudades] = useState([])
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [ordenarPor, setOrdenarPor] = useState('recientes')
@@ -197,6 +199,22 @@ export default function NicoClientes() {
     if (!error) setAsesores(data || [])
   }, [])
 
+  // Punto 9: ciudades ya existentes en los clientes, para el desplegable de filtro.
+  const cargarCiudades = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('ciudad')
+      .not('ciudad', 'is', null)
+      .neq('ciudad', '')
+
+    if (!error) {
+      const unicas = [...new Set((data || []).map((r) => r.ciudad.trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, 'es')
+      )
+      setCiudades(unicas)
+    }
+  }, [])
+
   const cargarClientes = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -208,6 +226,7 @@ export default function NicoClientes() {
     } else if (filtroAsesor) {
       query = query.eq('asesor_id', filtroAsesor)
     }
+    if (filtroCiudad) query = query.eq('ciudad', filtroCiudad)
     if (busqueda.trim()) {
       const texto = busqueda.trim()
       query = query.or(`empresa.ilike.%${texto}%,nombre_contacto.ilike.%${texto}%,telefono.ilike.%${texto}%`)
@@ -289,11 +308,12 @@ export default function NicoClientes() {
 
     setFilas(combinadas)
     setLoading(false)
-  }, [esDirector, profile, filtroAsesor, filtroEstadoEntrega, fechaDesde, fechaHasta, busqueda, ordenarPor])
+  }, [esDirector, profile, filtroAsesor, filtroEstadoEntrega, filtroCiudad, fechaDesde, fechaHasta, busqueda, ordenarPor])
 
   useEffect(() => {
     cargarAsesores()
-  }, [cargarAsesores])
+    cargarCiudades()
+  }, [cargarAsesores, cargarCiudades])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -306,6 +326,7 @@ export default function NicoClientes() {
     setBusqueda('')
     setFiltroAsesor('')
     setFiltroEstadoEntrega('')
+    setFiltroCiudad('')
     setFechaDesde('')
     setFechaHasta('')
   }
@@ -336,7 +357,7 @@ export default function NicoClientes() {
             />
           </div>
 
-          <div className={`grid grid-cols-2 ${esDirector ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-2`}>
+          <div className={`grid grid-cols-2 ${esDirector ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-2`}>
             {esDirector && (
               <select
                 value={filtroAsesor}
@@ -363,6 +384,22 @@ export default function NicoClientes() {
               {ESTADOS_ENTREGA.map((e) => (
                 <option key={e.value} value={e.value}>
                   {e.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Punto 9: filtro por ciudad — desplegable con las ciudades que
+                ya existen en los clientes registrados. */}
+            <select
+              value={filtroCiudad}
+              onChange={(e) => setFiltroCiudad(e.target.value)}
+              className={inputCls}
+              style={inputStyle}
+            >
+              <option value="">Todas las ciudades</option>
+              {ciudades.map((c) => (
+                <option key={c} value={c}>
+                  {c}
                 </option>
               ))}
             </select>
