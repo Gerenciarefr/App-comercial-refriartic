@@ -6,6 +6,7 @@ import AvanceMetasPersonal from '../components/AvanceMetasPersonal'
 import HistorialPromedios from '../components/HistorialPromedios'
 import Recaudos from '../components/Recaudos'
 import DetalleVentasModal from '../components/DetalleVentasModal'
+import { obtenerNotaRanking } from '../lib/notaRanking'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -143,6 +144,14 @@ export default function AsesorDetalle() {
   const [form, setForm] = useState({ nombre: '', cedula: '', celular_comercial: '', celular_personal: '', email: '' })
   const [guardando, setGuardando] = useState(false)
   const [guardarMsg, setGuardarMsg] = useState(null)
+
+  // Punto 5: nota automática según la posición actual del asesor en el ranking.
+  const [notaRanking, setNotaRanking] = useState(null)
+
+  useEffect(() => {
+    if (!id) return
+    obtenerNotaRanking(id).then(setNotaRanking)
+  }, [id])
 
   const semana = rangoSemana(offsetSemana)
   // Igual que en el resumen del director: en la semana actual (offset 0)
@@ -469,7 +478,11 @@ export default function AsesorDetalle() {
         <div className="flex items-start justify-between gap-2 mt-1.5">
           <div>
             <h1 className="text-2xl font-bold text-white">{asesor?.full_name || asesor?.nombre || 'Cargando...'}</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{asesor?.email}</p>
+            {notaRanking?.mensaje && (
+              <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                {notaRanking.mensaje}
+              </p>
+            )}
           </div>
           {asesor && !editando && (
             <button

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
@@ -83,6 +83,25 @@ const IconTrash = (props) => (
 const inputCls = 'w-full rounded-xl px-3 py-2 text-sm bg-white focus:outline-none'
 const inputStyle = { border: `0.5px solid ${C.border}`, color: C.textPrimary }
 
+// --- Fechas (para puntos 6 y 7: recaudos pendientes y estadística semana/mes) ---
+function aYMD(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function inicioSemanaStr() {
+  const d = new Date()
+  const dia = d.getDay()
+  const diff = dia === 0 ? -6 : 1 - dia
+  d.setDate(d.getDate() + diff)
+  return aYMD(d)
+}
+function inicioMesStr() {
+  const d = new Date()
+  return aYMD(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+
 export default function Recaudos({ asesorId, esDirector = false }) {
   const [pagos, setPagos] = useState([])
   const [abonosPorPago, setAbonosPorPago] = useState({}) // { [pagoId]: [abono, ...] }
@@ -94,6 +113,11 @@ export default function Recaudos({ asesorId, esDirector = false }) {
   const [eliminandoId, setEliminandoId] = useState(null)
 
   const [modalAbierto, setModalAbierto] = useState(false)
+
+  // Punto 6: pedidos de los clientes de este asesor que todavía no tienen
+  // ningún recaudo asociado.
+  const [pedidosPendientes, setPedidosPendientes] = useState([])
+  const [mostrarPendientes, setMostrarPendientes] = useState(false)
 
   const cargar = useCallback(async () => {
     if (!asesorId) return
@@ -138,12 +162,58 @@ export default function Recaudos({ asesorId, esDirector = false }) {
     setAbonosPorPago(agrupado)
     setClientesMap(Object.fromEntries((clientesData || []).map((c) => [c.id, c])))
     setOpsMap(Object.fromEntries((opsData || []).map((o) => [o.id, o])))
+
+    // Punto 6: se listan los pedidos de los clientes de este asesor que no
+    // aparecen todavía como order_op_id en ningún pago_factura.
+    const pedidosYaCobrados = new Set((pagosData || []).map((p) => p.order_op_id).filter(Boolean))
+    const { data: clientesAsesor } = await supabase
+      .from('clients')
+      .select('id, empresa, nombre_contacto')
+      .eq('asesor_id', asesorId)
+    const clientesAsesorIds = (clientesAsesor || []).map((c) => c.id)
+    const clientesAsesorMap = Object.fromEntries((clientesAsesor || []).map((c) => [c.id, c]))
+
+    let pendientes = []
+    if (clientesAsesorIds.length > 0) {
+      const { data: todosPedidos } = await supabase
+        .from('order_ops')
+        .select('id, client_id, numero_pedido, valor_con_iva')
+        .in('client_id', clientesAsesorIds)
+
+      pendientes = (todosPedidos || [])
+        .filter((o) => !pedidosYaCobrados.has(o.id))
+        .map((o) => ({
+          id: o.id,
+          numeroPedido: o.numero_pedido,
+          valor: o.valor_con_iva,
+          cliente: clientesAsesorMap[o.client_id]?.empresa || clientesAsesorMap[o.client_id]?.nombre_contacto || 'Cliente',
+        }))
+    }
+    setPedidosPendientes(pendientes)
+
     setCargando(false)
   }, [asesorId])
 
   useEffect(() => {
     cargar()
   }, [cargar])
+
+  // Punto 7: suma de abonos de la semana y el mes en curso, usando la fecha
+  // real del abono (fecha_abono), no la fecha de creación del registro.
+  const statsRecaudo = useMemo(() => {
+    const inicioSemana = inicioSemanaStr()
+    const inicioMes = inicioMesStr()
+    let semana = 0
+    let mes = 0
+    Object.values(abonosPorPago).forEach((abonos) => {
+      abonos.forEach((a) => {
+        const valor = Number(a.valor_abonado || 0)
+        if (a.fecha_abono >= inicioMes) mes += valor
+        if (a.fecha_abono >= inicioSemana) semana += valor
+      })
+    })
+    return { semana, mes }
+  }, [abonosPorPago])
 
   const nombreCliente = (pago) => {
     if (pago.client_id) {
@@ -191,19 +261,56 @@ export default function Recaudos({ asesorId, esDirector = false }) {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-2 px-1">
-        <span className="flex items-center gap-1.5">
-          <IconWallet size={16} style={{ color: C.navy }} />
-          <h2 className="text-base font-extrabold tracking-tight" style={{ color: C.navy }}>PAGOS Y RECAUDOS</h2>
-        </span>
+      <div className="mb-2 px-1">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <IconWallet size={16} style={{ color: C.navy }} />
+            <h2 className="text-base font-extrabold tracking-tight" style={{ color: C.navy }}>PAGOS Y RECAUDOS</h2>
+          </span>
+          <button
+            onClick={() => setModalAbierto(true)}
+            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+            style={{ backgroundColor: C.orange, color: '#412402' }}
+          >
+            <IconPlus size={12} />
+            Agregar Recaudo
+          </button>
+        </div>
+
+        {/* Punto 6: notificación de recaudos al día / pendientes */}
         <button
-          onClick={() => setModalAbierto(true)}
-          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
-          style={{ backgroundColor: C.orange, color: '#412402' }}
+          onClick={() => pedidosPendientes.length > 0 && setMostrarPendientes((v) => !v)}
+          className="mt-1 flex items-center gap-1 text-[11px] font-semibold"
+          style={{
+            color: pedidosPendientes.length > 0 ? '#B5590A' : '#1D9E75',
+            cursor: pedidosPendientes.length > 0 ? 'pointer' : 'default',
+          }}
         >
-          <IconPlus size={12} />
-          Agregar Recaudo
+          {pedidosPendientes.length > 0
+            ? `⚠ Faltan ${pedidosPendientes.length} recaudo${pedidosPendientes.length !== 1 ? 's' : ''} por agregar`
+            : '✓ Recaudos al día'}
         </button>
+
+        {mostrarPendientes && pedidosPendientes.length > 0 && (
+          <div className="mt-1.5 rounded-xl p-2 space-y-1" style={{ backgroundColor: '#FAEEDA', border: '0.5px solid #F0D9AE' }}>
+            {pedidosPendientes.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-2 text-[11px]">
+                <span style={{ color: C.textPrimary }} className="truncate">{p.cliente} — Pedido {p.numeroPedido}</span>
+                <span style={{ color: C.textSecondary }} className="shrink-0">{formatoCOP.format(Number(p.valor || 0))}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Punto 7: estadística de recaudo de la semana y el mes */}
+        <div className="flex items-center gap-3 mt-1.5">
+          <span className="text-[11px]" style={{ color: C.textSecondary }}>
+            Semana: <strong style={{ color: C.textPrimary }}>{formatoCOP.format(statsRecaudo.semana)}</strong>
+          </span>
+          <span className="text-[11px]" style={{ color: C.textSecondary }}>
+            Mes: <strong style={{ color: C.textPrimary }}>{formatoCOP.format(statsRecaudo.mes)}</strong>
+          </span>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600 px-1 mb-2">{error}</p>}

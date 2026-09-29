@@ -39,13 +39,16 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
   const inicioSemana = useMemo(() => lunesDeLaSemana(cursor), [cursor])
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDias(inicioSemana, i)), [inicioSemana])
 
+  // Punto 10: ahora la tarjeta muestra entregas de todos los asesores a
+  // cualquiera que la abra, así que ya no se puede asumir que todo es "Yo"
+  // cuando quien mira no es director — solo se muestra "Yo" para las propias.
   const nombreAsesorId = useCallback(
     (id) => {
-      if (!esDirector) return profile?.full_name || profile?.nombre || 'Yo'
+      if (id === profile?.id) return 'Yo'
       const a = (asesores || []).find((x) => x.id === id)
       return a?.full_name || a?.nombre || '—'
     },
-    [esDirector, asesores, profile]
+    [asesores, profile]
   )
 
   const cargar = useCallback(async () => {

@@ -194,6 +194,9 @@ export default function PerfilAsesor() {
   const [totalAsesores, setTotalAsesores] = useState(0)
   const [miFilaRanking, setMiFilaRanking] = useState(null)
 
+  // Punto 5: nota automática según la posición actual en el ranking.
+  const [notaRanking, setNotaRanking] = useState(null)
+
   const [stats, setStats] = useState(statsVacias())
   const [statsEmpresa, setStatsEmpresa] = useState(null)
   const [categoriasSeleccionadas, setCategoriasSeleccionadas] = useState(CATEGORIAS.map((c) => c.value))
@@ -403,6 +406,21 @@ export default function PerfilAsesor() {
     cargar()
   }, [cargar])
 
+  // Punto 5: una vez se sabe la posición actual, se busca la nota programada
+  // por el director para ese puesto.
+  useEffect(() => {
+    if (!miPosicion) {
+      setNotaRanking(null)
+      return
+    }
+    supabase
+      .from('notas_ranking')
+      .select('mensaje')
+      .eq('posicion', miPosicion)
+      .maybeSingle()
+      .then(({ data }) => setNotaRanking(data?.mensaje?.trim() || null))
+  }, [miPosicion])
+
   const toggleCategoria = (value) => {
     setCategoriasSeleccionadas((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]))
   }
@@ -446,6 +464,11 @@ export default function PerfilAsesor() {
             Tu resumen
           </p>
           <h1 className="text-2xl font-bold text-white mt-0.5">{profile?.full_name || profile?.nombre || 'Perfil'}</h1>
+          {notaRanking && (
+            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {notaRanking}
+            </p>
+          )}
         </div>
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"

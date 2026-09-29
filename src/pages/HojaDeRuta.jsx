@@ -345,9 +345,13 @@ export default function HojaDeRuta() {
     return { inicio, fin }
   }, [vista, cursor])
 
-  // -- Cargar asesores (solo director los necesita para filtrar) ------------
+  // -- Cargar asesores -------------------------------------------------------
+  // Antes solo se cargaba para el director (se usaba nada más para el filtro
+  // del calendario). Punto 10: ahora también se necesita para todos, porque
+  // la tarjeta de "Entregas programadas" muestra las entregas de TODOS los
+  // asesores a cualquiera que la abra, y hace falta esta lista para poder
+  // mostrar el nombre de cada uno.
   useEffect(() => {
-    if (!esDirector) return
     supabase
       .from('profiles')
       .select('id, full_name, nombre')
@@ -355,13 +359,19 @@ export default function HojaDeRuta() {
       .eq('active', true)
       .order('full_name', { ascending: true })
       .then(({ data }) => setAsesores(data || []))
-  }, [esDirector])
+  }, [])
 
   const asesoresVisibles = useMemo(() => {
     if (!esDirector) return profile?.id ? [profile.id] : []
     if (asesorFiltro === 'todos') return asesores.map((a) => a.id)
     return [asesorFiltro]
   }, [esDirector, profile, asesorFiltro, asesores])
+
+  // Punto 10: la tarjeta de Entregas programadas es la única excepción — se
+  // le pasan TODOS los asesores activos sin importar el rol de quien la abre
+  // ni el filtro del calendario, para que cualquier asesor vea las entregas
+  // de todos al abrirla.
+  const idsParaEntregas = useMemo(() => asesores.map((a) => a.id), [asesores])
 
   const nombreAsesorId = useCallback(
     (id) => {
@@ -565,7 +575,7 @@ export default function HojaDeRuta() {
 
       {modalEntregasAbierto && (
         <EntregasProgramadas
-          asesoresVisibles={asesoresVisibles}
+          asesoresVisibles={idsParaEntregas}
           asesores={asesores}
           esDirector={esDirector}
           profile={profile}
