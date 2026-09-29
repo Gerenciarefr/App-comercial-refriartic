@@ -252,6 +252,7 @@ export default function NicoClientes() {
 
     let ordersByClient = {}
     let tasksByClient = {}
+    let pedidoOpsCountByOp = {}
 
     if (ids.length > 0) {
       const [{ data: ops, error: errOps }, { data: tareas, error: errTareas }] = await Promise.all([
@@ -263,7 +264,6 @@ export default function NicoClientes() {
       // el detalle del cliente (falta fecha de entrega o no tiene items
       // registrados), pero consultado en bloque para toda la lista.
       const opIds = (ops || []).map((o) => o.id)
-      let pedidoOpsCountByOp = {}
       if (opIds.length > 0) {
         const { data: pedidoOps } = await supabase.from('pedido_ops').select('order_op_id').in('order_op_id', opIds)
         pedidoOpsCountByOp = (pedidoOps || []).reduce((acc, r) => {
