@@ -7,6 +7,7 @@ import HistorialPromedios from '../components/HistorialPromedios'
 import Recaudos from '../components/Recaudos'
 import DetalleVentasModal from '../components/DetalleVentasModal'
 import { obtenerNotaRanking } from '../lib/notaRanking'
+import RecaudoStatCard from '../components/RecaudoStatCard'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -634,7 +635,10 @@ export default function AsesorDetalle() {
 
               <div>
                 <h2 className="text-sm font-semibold mb-2 px-1" style={{ color: C.textPrimary }}>Ventas</h2>
-                <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
+                  <RecaudoStatCard asesorId={id} />
+                </div>
               </div>
 
               <div>

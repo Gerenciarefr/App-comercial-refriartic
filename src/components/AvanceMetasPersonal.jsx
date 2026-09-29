@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { rangoSemana } from '../lib/fechas'
+import GraficoValorVendidoAnual from './GraficoValorVendidoAnual'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -243,10 +244,10 @@ export default function AvanceMetasPersonal({ asesorId }) {
   const metaValorConIva = Number(metaActual.meta_valor_con_iva || 0)
 
   const pctVentas = metaVentas > 0 ? Math.min(100, Math.round((ventasActual / metaVentas) * 100)) : 0
-  const pctValor = metaValorSinIva > 0 ? Math.min(100, Math.round((valorActualSinIva / metaValorSinIva) * 100)) : 0
+  const pctValor = metaValorConIva > 0 ? Math.min(100, Math.round((valorActualConIva / metaValorConIva) * 100)) : 0
 
   const faltanVentas = Math.max(0, metaVentas - ventasActual)
-  const faltanValor = Math.max(0, metaValorSinIva - valorActualSinIva)
+  const faltanValor = Math.max(0, metaValorConIva - valorActualConIva)
 
   return (
     <section>
@@ -264,34 +265,37 @@ export default function AvanceMetasPersonal({ asesorId }) {
       ) : (
         <>
           <div className="space-y-3 mb-3">
-            {/* Valor vendido — anillo de progreso, mismo lenguaje que Resumen/Perfil */}
-            <div className="rounded-2xl p-4 flex items-center gap-4" style={{ backgroundColor: C.navy }}>
-              <AnilloMeta pct={pctValor} />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs mb-1" style={{ color: C.orange }}>Valor vendido (sin IVA)</p>
-                <p className="text-sm font-semibold text-white mb-1.5 leading-snug">
-                  {formatoCOP.format(valorActualSinIva)}
-                  <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>
-                    {' '}
-                    {metaValorSinIva > 0 ? `de ${formatoCOP.format(metaValorSinIva)}` : '· sin meta configurada'}
+            {/* Valor vendido — punto 2: barra horizontal (mismo formato que
+                "Ventas hechas"), mostrando solo el valor con IVA. */}
+            <div className="rounded-2xl p-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: C.textPrimary }}>
+                  <IconFlame size={15} style={{ color: C.orange }} />
+                  Valor vendido
+                </span>
+                <span className="text-sm font-semibold" style={{ color: C.textPrimary }}>
+                  {formatoCOP.format(valorActualConIva)}{' '}
+                  <span style={{ color: C.textMuted, fontWeight: 400 }}>
+                    / {metaValorConIva > 0 ? formatoCOP.format(metaValorConIva) : '—'}
                   </span>
-                </p>
-                {metaValorSinIva > 0 && (
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                    style={{ backgroundColor: 'rgba(252,163,17,0.15)' }}
-                  >
-                    <IconFlame size={12} style={{ color: C.orange }} />
-                    <span className="text-[11px] font-medium" style={{ color: C.orange }}>
-                      {faltanValor > 0 ? `Faltan ${formatoCOP.format(faltanValor)}` : '¡Meta alcanzada!'}
-                    </span>
-                  </span>
-                )}
-                <p className="text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Con IVA: {formatoCOP.format(valorActualConIva)}
-                  {metaValorConIva > 0 ? ` / ${formatoCOP.format(metaValorConIva)}` : ''}
-                </p>
+                </span>
               </div>
+              <div className="h-3.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EDEDE7' }}>
+                <div className="h-full rounded-full" style={{ width: `${pctValor}%`, backgroundColor: C.navy }} />
+              </div>
+              <p className="text-xs mt-2" style={{ color: C.textSecondary }}>
+                {metaValorConIva === 0 ? (
+                  'Sin meta configurada'
+                ) : faltanValor > 0 ? (
+                  <>
+                    Faltan{' '}
+                    <span style={{ color: C.textPrimary, fontWeight: 600 }}>{formatoCOP.format(faltanValor)}</span>{' '}
+                    para la meta
+                  </>
+                ) : (
+                  '¡Meta alcanzada! 🎉'
+                )}
+              </p>
             </div>
 
             {/* Ventas hechas — barra gruesa con mensaje motivacional */}
@@ -324,6 +328,10 @@ export default function AvanceMetasPersonal({ asesorId }) {
                 )}
               </p>
             </div>
+          </div>
+
+          <div className="mb-3">
+            <GraficoValorVendidoAnual asesorIds={asesorId ? [asesorId] : []} />
           </div>
 
           <div className="flex gap-2 px-1">

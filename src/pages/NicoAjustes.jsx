@@ -5,6 +5,7 @@ import { useModoApoyoLocal } from '../lib/modoApoyoLocal'
 import ProyeccionMetas from '../components/ProyeccionMetas'
 import MensajesPredeterminados from '../components/MensajesPredeterminados'
 import NotasRanking from '../components/NotasRanking'
+import Etiquetas from '../components/Etiquetas'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -23,6 +24,7 @@ const TABS = [
   { key: 'metas', label: 'Proyección de metas' },
   { key: 'mensajes', label: 'Mensajes predeterminados' },
   { key: 'notas_ranking', label: 'Notas de ranking' },
+  { key: 'etiquetas', label: 'Etiquetas' },
 ]
 
 // --- Íconos SVG minimalistas (sin dependencias externas) ---
@@ -249,6 +251,7 @@ export default function NicoAjustes() {
         {tabActiva === 'metas' && <ProyeccionMetas />}
         {tabActiva === 'mensajes' && <MensajesPredeterminados />}
         {tabActiva === 'notas_ranking' && <NotasRanking />}
+        {tabActiva === 'etiquetas' && <Etiquetas />}
 
         {tabActiva === 'general' && (
           <div className="space-y-4">

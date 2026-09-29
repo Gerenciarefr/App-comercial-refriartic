@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
+import EtiquetasPicker from '../components/EtiquetasPicker'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -466,6 +467,10 @@ export default function NicoLeadDetalle() {
             </span>
           </div>
 
+          <div className="mt-3">
+            <EtiquetasPicker tabla="lead_etiquetas" campoId="lead_id" entidadId={id} oscuro />
+          </div>
+
           {/* Motivo de venta perdida: se guarda al cambiar el estado (aquí o
               desde la Hoja de Ruta) pero antes no se mostraba en ningún
               lado — ahora queda visible justo debajo del estado. */}
@@ -701,14 +706,16 @@ export default function NicoLeadDetalle() {
           <div>
             <label className="text-xs" style={{ color: C.textSecondary }}>
               Código de cotización (obligatorio para "Cotización formal")
+              {lead.codigo_cotizacion && !esDirector ? ' · solo el director puede modificarlo' : ''}
             </label>
             <input
               type="text"
               value={form.codigo_cotizacion}
               onChange={(e) => cambiarForm('codigo_cotizacion', e.target.value)}
               placeholder="Ej: COT-2026-014"
+              disabled={!!lead.codigo_cotizacion && !esDirector}
               className={inputCls}
-              style={inputStyle}
+              style={lead.codigo_cotizacion && !esDirector ? { ...inputStyle, opacity: 0.6 } : inputStyle}
             />
           </div>
 

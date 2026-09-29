@@ -202,8 +202,9 @@ function DivisorMes({ etiqueta }) {
   )
 }
 
-function LeadCard({ lead, asesores, esDirector, reasignando, reasignar, navigate }) {
+function LeadCard({ lead, asesores, esDirector, reasignando, reasignar, navigate, etiquetasPorLead }) {
   const info = estadoInfo(lead.estado)
+  const misEtiquetas = etiquetasPorLead?.[lead.id] || []
   const asesorActual = asesores.find((a) => a.id === lead.asesor_id)
   const nombreAsesorActual = asesorActual ? asesorActual.full_name || asesorActual.nombre : null
   const link = waLink(lead.telefono)
@@ -240,6 +241,19 @@ function LeadCard({ lead, asesores, esDirector, reasignando, reasignar, navigate
             </a>
           ) : (
             <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>Sin teléfono</p>
+          )}
+          {misEtiquetas.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {misEtiquetas.map((et) => (
+                <span
+                  key={et.id}
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: `${et.color}1A`, color: et.color, border: `1px solid ${et.color}55` }}
+                >
+                  {et.texto}
+                </span>
+              ))}
+            </div>
           )}
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -336,6 +350,8 @@ export default function NicoLeads() {
   const [asesores, setAsesores] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // Punto 5: etiquetas de cada lead visible, para pintarlas en la tarjeta.
+  const [etiquetasPorLead, setEtiquetasPorLead] = useState({})
 
   // filtros
   const [busqueda, setBusqueda] = useState('')
@@ -423,8 +439,28 @@ export default function NicoLeads() {
     if (error) {
       setError(error.message)
       setLeads([])
+      setEtiquetasPorLead({})
     } else {
       setLeads(data || [])
+
+      // Punto 5: una sola consulta para las etiquetas de todos los leads
+      // visibles, en vez de una por tarjeta.
+      const leadIds = (data || []).map((l) => l.id)
+      if (leadIds.length > 0) {
+        const { data: rels } = await supabase
+          .from('lead_etiquetas')
+          .select('lead_id, etiquetas(id, texto, color)')
+          .in('lead_id', leadIds)
+        const mapa = {}
+        ;(rels || []).forEach((r) => {
+          if (!r.etiquetas) return
+          mapa[r.lead_id] = mapa[r.lead_id] || []
+          mapa[r.lead_id].push(r.etiquetas)
+        })
+        setEtiquetasPorLead(mapa)
+      } else {
+        setEtiquetasPorLead({})
+      }
     }
     setLoading(false)
   }, [esDirector, profile, filtroAsesor, filtroEstado, filtroOrigen, filtroCiudad, fechaDesde, fechaHasta, busqueda])
@@ -532,7 +568,7 @@ export default function NicoLeads() {
   const leadsActivos = filtroEsPerdidos ? leads : leads.filter((l) => l.estado !== 'venta_perdida')
   const leadsPerdidos = filtroEsPerdidos ? [] : leads.filter((l) => l.estado === 'venta_perdida')
 
-  const propsCard = { asesores, esDirector, reasignando, reasignar, navigate }
+  const propsCard = { asesores, esDirector, reasignando, reasignar, navigate, etiquetasPorLead }
 
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: C.bg }}>

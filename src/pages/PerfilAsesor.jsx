@@ -5,6 +5,8 @@ import { rangoSemana } from '../lib/fechas'
 import HistorialPromedios from '../components/HistorialPromedios'
 import Recaudos from '../components/Recaudos'
 import DetalleVentasModal from '../components/DetalleVentasModal'
+import GraficoValorVendidoAnual from '../components/GraficoValorVendidoAnual'
+import RecaudoStatCard from '../components/RecaudoStatCard'
 
 const formatoCOP = new Intl.NumberFormat('es-CO', {
   style: 'currency',
@@ -659,7 +661,10 @@ export default function PerfilAsesor() {
               {mostrar('ventas') && (
                 <div>
                   <SectionTitle icon={<IconRocket size={14} style={{ color: C.textPrimary }} />} texto="Ventas" />
-                  <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
+                    <RecaudoStatCard asesorId={asesorId} />
+                  </div>
                 </div>
               )}
             </section>
@@ -669,12 +674,10 @@ export default function PerfilAsesor() {
               <SectionTitle icon={<IconTarget size={14} style={{ color: C.textPrimary }} />} texto="Avance de metas" />
               <div className="space-y-4 mb-3">
                 <BloqueMetaAvance titulo="Tu meta personal" sufijo={periodoInfo.sufijo} stats={statsMeta} meta={metaPersonal} />
-                <BloqueMetaAvance
-                  titulo="Empresa (todos los asesores)"
-                  sufijo={periodoInfo.sufijo}
-                  stats={statsEmpresa || statsMeta}
-                  meta={metaEmpresa}
-                />
+              </div>
+
+              <div className="mb-3">
+                <GraficoValorVendidoAnual asesorIds={asesorId ? [asesorId] : []} />
               </div>
 
               <div className="flex gap-2 px-1">
@@ -761,37 +764,6 @@ function StatCard({ label, semana, mes }) {
   )
 }
 
-// Anillo de progreso circular — usado para la métrica de valor vendido dentro
-// del bloque de avance de metas (más emocional que una barra plana).
-function AnilloMeta({ pct }) {
-  const r = 30
-  const circunferencia = 2 * Math.PI * r
-  const offset = circunferencia * (1 - Math.min(100, pct) / 100)
-  return (
-    <svg width="72" height="72" viewBox="0 0 72 72" className="flex-shrink-0">
-      <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="7" />
-      <circle
-        cx="36"
-        cy="36"
-        r={r}
-        fill="none"
-        stroke={C.orange}
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeDasharray={circunferencia}
-        strokeDashoffset={offset}
-        transform="rotate(-90 36 36)"
-      />
-      <text x="36" y="33" textAnchor="middle" fontSize="16" fontWeight="700" fill="#FFFFFF">
-        {pct}%
-      </text>
-      <text x="36" y="46" textAnchor="middle" fontSize="7.5" fill={C.orange}>
-        de la meta
-      </text>
-    </svg>
-  )
-}
-
 function BloqueMetaAvance({ titulo, sufijo, stats, meta }) {
   const ventasActual = stats[`ventas${sufijo}`] || 0
   const valorActualSinIva = stats[`valor${sufijo}SinIva`] || 0
@@ -802,10 +774,10 @@ function BloqueMetaAvance({ titulo, sufijo, stats, meta }) {
   const metaValorConIva = Number(meta.meta_valor_con_iva || 0)
 
   const pctVentas = metaVentas > 0 ? Math.min(100, Math.round((ventasActual / metaVentas) * 100)) : 0
-  const pctValor = metaValorSinIva > 0 ? Math.min(100, Math.round((valorActualSinIva / metaValorSinIva) * 100)) : 0
+  const pctValor = metaValorConIva > 0 ? Math.min(100, Math.round((valorActualConIva / metaValorConIva) * 100)) : 0
 
   const faltanVentas = Math.max(0, metaVentas - ventasActual)
-  const faltanValor = Math.max(0, metaValorSinIva - valorActualSinIva)
+  const faltanValor = Math.max(0, metaValorConIva - valorActualConIva)
 
   return (
     <div className="space-y-3">
@@ -813,36 +785,36 @@ function BloqueMetaAvance({ titulo, sufijo, stats, meta }) {
         {titulo}
       </p>
 
-      {/* Valor vendido — anillo de progreso, más visual/emocional */}
-      <div className="rounded-2xl p-4 flex items-center gap-4" style={{ backgroundColor: C.navy }}>
-        <AnilloMeta pct={pctValor} />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs mb-1" style={{ color: C.orange }}>
-            Valor vendido (sin IVA)
-          </p>
-          <p className="text-sm font-semibold text-white mb-1.5 leading-snug">
-            {formatoCOP.format(valorActualSinIva)}
-            <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>
-              {' '}
-              {metaValorSinIva > 0 ? `de ${formatoCOP.format(metaValorSinIva)}` : '· sin meta configurada'}
+      {/* Valor vendido — punto 2: barra horizontal (mismo formato que
+          "Ventas hechas"), mostrando solo el valor con IVA. */}
+      <div className="rounded-2xl p-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: C.textPrimary }}>
+            <IconFlame size={15} style={{ color: C.orange }} />
+            Valor vendido
+          </span>
+          <span className="text-sm font-semibold" style={{ color: C.textPrimary }}>
+            {formatoCOP.format(valorActualConIva)}{' '}
+            <span style={{ color: C.textMuted, fontWeight: 400 }}>
+              / {metaValorConIva > 0 ? formatoCOP.format(metaValorConIva) : '—'}
             </span>
-          </p>
-          {metaValorSinIva > 0 && (
-            <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-              style={{ backgroundColor: 'rgba(252,163,17,0.15)' }}
-            >
-              <IconFlame size={12} style={{ color: C.orange }} />
-              <span className="text-[11px] font-medium" style={{ color: C.orange }}>
-                {faltanValor > 0 ? `Faltan ${formatoCOP.format(faltanValor)}` : '¡Meta alcanzada!'}
-              </span>
-            </span>
-          )}
-          <p className="text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Con IVA: {formatoCOP.format(valorActualConIva)}
-            {metaValorConIva > 0 ? ` / ${formatoCOP.format(metaValorConIva)}` : ''}
-          </p>
+          </span>
         </div>
+        <div className="h-3.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EDEDE7' }}>
+          <div className="h-full rounded-full" style={{ width: `${pctValor}%`, backgroundColor: C.navy }} />
+        </div>
+        <p className="text-xs mt-2" style={{ color: C.textSecondary }}>
+          {metaValorConIva === 0 ? (
+            'Sin meta configurada'
+          ) : faltanValor > 0 ? (
+            <>
+              Faltan <span style={{ color: C.textPrimary, fontWeight: 600 }}>{formatoCOP.format(faltanValor)}</span>{' '}
+              para la meta
+            </>
+          ) : (
+            '¡Meta alcanzada! 🎉'
+          )}
+        </p>
       </div>
 
       {/* Ventas hechas — barra gruesa con mensaje motivacional */}

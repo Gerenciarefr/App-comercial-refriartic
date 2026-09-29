@@ -150,6 +150,13 @@ const IconMapPin = (props) => (
     <circle cx="12" cy="10" r="3" />
   </IconBase>
 )
+const IconAlertTriangle = (props) => (
+  <IconBase {...props}>
+    <path d="m21.7 18-8.6-15a2 2 0 0 0-3.5 0l-8.6 15A2 2 0 0 0 2.7 21h18.6a2 2 0 0 0 1.7-3Z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </IconBase>
+)
 const IconMessage = (props) => (
   <IconBase {...props}>
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
@@ -252,6 +259,19 @@ export default function NicoClientes() {
         supabase.from('automated_tasks').select('*').in('client_id', ids).in('tipo', TIPOS_POSTVENTA),
       ])
 
+      // Punto 8: mismo criterio de "Completar información importante" que en
+      // el detalle del cliente (falta fecha de entrega o no tiene items
+      // registrados), pero consultado en bloque para toda la lista.
+      const opIds = (ops || []).map((o) => o.id)
+      let pedidoOpsCountByOp = {}
+      if (opIds.length > 0) {
+        const { data: pedidoOps } = await supabase.from('pedido_ops').select('order_op_id').in('order_op_id', opIds)
+        pedidoOpsCountByOp = (pedidoOps || []).reduce((acc, r) => {
+          acc[r.order_op_id] = (acc[r.order_op_id] || 0) + 1
+          return acc
+        }, {})
+      }
+
       if (errOps) {
         setError(errOps.message)
         setLoading(false)
@@ -276,13 +296,31 @@ export default function NicoClientes() {
       }, {})
     }
 
+    let etiquetasPorCliente = {}
+    if (ids.length > 0) {
+      const { data: rels } = await supabase
+        .from('cliente_etiquetas')
+        .select('client_id, etiquetas(id, texto, color)')
+        .in('client_id', ids)
+      ;(rels || []).forEach((r) => {
+        if (!r.etiquetas) return
+        etiquetasPorCliente[r.client_id] = etiquetasPorCliente[r.client_id] || []
+        etiquetasPorCliente[r.client_id].push(r.etiquetas)
+      })
+    }
+
     let combinadas = (clientes || []).map((c) => {
       const bestOp = mejorOrderOp(ordersByClient[c.id])
+      const infoIncompleta = (ordersByClient[c.id] || []).some(
+        (op) => !op.fecha_entrega || !pedidoOpsCountByOp[op.id]
+      )
       return {
         ...c,
         bestOp,
         postventaPendiente: tienePostventaPendiente(tasksByClient[c.id]),
         valores: calcularValoresComprados(ordersByClient[c.id]),
+        infoIncompleta,
+        etiquetas: etiquetasPorCliente[c.id] || [],
       }
     })
 
@@ -514,6 +552,25 @@ export default function NicoClientes() {
                       </a>
                     ) : (
                       <p className="text-xs mt-0.5" style={{ color: C.textMuted }}>Sin teléfono</p>
+                    )}
+                    {c.infoIncompleta && (
+                      <p className="text-[11px] mt-1 font-medium flex items-center gap-1" style={{ color: '#A32D2D' }}>
+                        <IconAlertTriangle size={11} />
+                        Completar información importante
+                      </p>
+                    )}
+                    {c.etiquetas.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {c.etiquetas.map((et) => (
+                          <span
+                            key={et.id}
+                            className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: `${et.color}1A`, color: et.color, border: `1px solid ${et.color}55` }}
+                          >
+                            {et.texto}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">

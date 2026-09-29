@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
+import EtiquetasPicker from '../components/EtiquetasPicker'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -905,7 +906,15 @@ export default function NicoClienteDetalle() {
                 {iniciales(asesor ? asesor.full_name || asesor.nombre : null)}
               </span>
             </div>
-          ) : (
+          ) : null}
+
+          {!editandoIdentidad && (
+            <div className="mt-3">
+              <EtiquetasPicker tabla="cliente_etiquetas" campoId="client_id" entidadId={id} oscuro />
+            </div>
+          )}
+
+          {editandoIdentidad && (
             <form onSubmit={guardarIdentidad} className="rounded-xl p-4 space-y-3" style={{ backgroundColor: C.card }}>
               <div>
                 <label className="text-xs" style={{ color: C.textSecondary }}>Nombre del contacto</label>
@@ -1072,11 +1081,97 @@ export default function NicoClienteDetalle() {
           </div>
         </div>
 
+        {/* Cotizaciones (recotización). Punto 12: una vez pasa a "venta
+            hecha" ya generó su pedido (abajo, en Pedidos), así que desaparece
+            de este cuadro. */}
+        {cotizaciones.filter((c) => c.estado !== 'venta_hecha').length > 0 && (
+          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: C.textPrimary }}>Cotizaciones</h2>
+            <div className="space-y-2">
+              {cotizaciones.filter((c) => c.estado !== 'venta_hecha').map((c) => {
+                const info = estadoCotizacionInfo(c.estado)
+                const activa = c.estado === 'cotizacion_enviada' || c.estado === 'pendiente'
+                return (
+                  <div key={c.id} className="rounded-xl p-3" style={{ border: `0.5px solid ${C.border}` }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        {/* Punto 11: el número de cotización ya no se puede
+                            modificar después de creado, salvo por el
+                            director (el valor cotizado sí se sigue pudiendo
+                            editar más abajo, sin restricción). */}
+                        <label className="text-[10px] block" style={{ color: C.textMuted }}>
+                          Número de cotización{!esDirector ? ' · solo el director puede modificarlo' : ''}
+                        </label>
+                        {esDirector ? (
+                          <input
+                            type="text"
+                            defaultValue={c.numero_cotizacion}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() !== c.numero_cotizacion) {
+                                actualizarNumeroCotizacion(c.id, e.target.value)
+                              }
+                            }}
+                            className="text-sm font-medium px-2 py-1 -ml-2 rounded-lg w-full"
+                            style={{ ...smallInputStyle, color: C.textPrimary, maxWidth: 220 }}
+                          />
+                        ) : (
+                          <p className="text-sm font-medium" style={{ color: C.textPrimary }}>{c.numero_cotizacion}</p>
+                        )}
+                        <p className="text-xs mt-1 flex items-center gap-1" style={{ color: C.textSecondary }}>
+                          ${Number(c.valor_cotizado).toLocaleString('es-CO')} (con IVA) · <IconMapPin size={11} />{c.ubicacion}
+                        </p>
+                        {c.detalle && <p className="text-xs mt-1" style={{ color: C.textMuted }}>{c.detalle}</p>}
+                        <p className="text-xs mt-1" style={{ color: C.textMuted }}>
+                          Creada: {new Date(c.created_at).toLocaleDateString('es-CO')}
+                        </p>
+                      </div>
+                      <span
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                        style={{ backgroundColor: info.bg, color: info.text }}
+                      >
+                        {info.label}
+                      </span>
+                    </div>
+
+                    {activa && (
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => iniciarVentaHecha(c)}
+                          disabled={procesandoCotizacionId === c.id}
+                          className="text-xs px-2.5 py-1.5 rounded-lg disabled:opacity-60 flex items-center gap-1"
+                          style={{ backgroundColor: '#1D9E75', color: '#FFFFFF' }}
+                        >
+                          <IconCheck size={11} />
+                          Venta hecha
+                        </button>
+                        <button
+                          onClick={() => rechazarCotizacion(c)}
+                          disabled={procesandoCotizacionId === c.id}
+                          className="text-xs px-2.5 py-1.5 rounded-lg disabled:opacity-60 flex items-center gap-1"
+                          style={{ backgroundColor: '#FCEBEB', color: '#A32D2D' }}
+                        >
+                          <IconX size={11} />
+                          Rechazada
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {cotizacionMsg && !pidiendoFechaPara && (
+              <p className={`text-sm mt-2 ${cotizacionMsg.tipo === 'error' ? 'text-red-600' : ''}`} style={cotizacionMsg.tipo === 'ok' ? { color: '#0F6E56' } : undefined}>
+                {cotizacionMsg.texto}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Pedidos */}
         <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
           <h2 className="text-sm font-semibold mb-3" style={{ color: C.textPrimary }}>Pedidos</h2>
 
-          <div className="space-y-3 mb-4">
+          <div className="space-y-4 mb-4">
             {pedidos.length === 0 && <p className="text-sm" style={{ color: C.textMuted }}>Sin pedidos todavía.</p>}
             {pedidosOrdenados.map((p) => {
               const info = estadoInfo(p.estado)
@@ -1087,7 +1182,7 @@ export default function NicoClienteDetalle() {
                   key={p.id}
                   className="rounded-xl p-3"
                   style={{
-                    border: `0.5px solid ${C.border}`,
+                    border: `1px solid #BFE0F5`,
                     backgroundColor: esEntregado ? '#F4F4F2' : C.card,
                   }}
                 >
@@ -1391,82 +1486,6 @@ export default function NicoClienteDetalle() {
               ma tenga un único camino de entrada y no se dupliquen datos. */}
         </div>
 
-        {/* Cotizaciones (recotización) */}
-        {cotizaciones.length > 0 && (
-          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: C.textPrimary }}>Cotizaciones</h2>
-            <div className="space-y-2">
-              {cotizaciones.map((c) => {
-                const info = estadoCotizacionInfo(c.estado)
-                const activa = c.estado === 'cotizacion_enviada' || c.estado === 'pendiente'
-                return (
-                  <div key={c.id} className="rounded-xl p-3" style={{ border: `0.5px solid ${C.border}` }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        {/* Número de cotización — editable por director y asesor,
-                            mismo patrón de edición inline (onBlur) que la
-                            ubicación de los pedidos, arriba. */}
-                        <label className="text-[10px] block" style={{ color: C.textMuted }}>Número de cotización</label>
-                        <input
-                          type="text"
-                          defaultValue={c.numero_cotizacion}
-                          onBlur={(e) => {
-                            if (e.target.value.trim() !== c.numero_cotizacion) {
-                              actualizarNumeroCotizacion(c.id, e.target.value)
-                            }
-                          }}
-                          className="text-sm font-medium px-2 py-1 -ml-2 rounded-lg w-full"
-                          style={{ ...smallInputStyle, color: C.textPrimary, maxWidth: 220 }}
-                        />
-                        <p className="text-xs mt-1 flex items-center gap-1" style={{ color: C.textSecondary }}>
-                          ${Number(c.valor_cotizado).toLocaleString('es-CO')} (con IVA) · <IconMapPin size={11} />{c.ubicacion}
-                        </p>
-                        {c.detalle && <p className="text-xs mt-1" style={{ color: C.textMuted }}>{c.detalle}</p>}
-                        <p className="text-xs mt-1" style={{ color: C.textMuted }}>
-                          Creada: {new Date(c.created_at).toLocaleDateString('es-CO')}
-                        </p>
-                      </div>
-                      <span
-                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-                        style={{ backgroundColor: info.bg, color: info.text }}
-                      >
-                        {info.label}
-                      </span>
-                    </div>
-
-                    {activa && (
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => iniciarVentaHecha(c)}
-                          disabled={procesandoCotizacionId === c.id}
-                          className="text-xs px-2.5 py-1.5 rounded-lg disabled:opacity-60 flex items-center gap-1"
-                          style={{ backgroundColor: '#1D9E75', color: '#FFFFFF' }}
-                        >
-                          <IconCheck size={11} />
-                          Venta hecha
-                        </button>
-                        <button
-                          onClick={() => rechazarCotizacion(c)}
-                          disabled={procesandoCotizacionId === c.id}
-                          className="text-xs px-2.5 py-1.5 rounded-lg disabled:opacity-60 flex items-center gap-1"
-                          style={{ backgroundColor: '#FCEBEB', color: '#A32D2D' }}
-                        >
-                          <IconX size={11} />
-                          Rechazada
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {cotizacionMsg && !pidiendoFechaPara && (
-              <p className={`text-sm mt-2 ${cotizacionMsg.tipo === 'error' ? 'text-red-600' : ''}`} style={cotizacionMsg.tipo === 'ok' ? { color: '#0F6E56' } : undefined}>
-                {cotizacionMsg.texto}
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Prompt: fecha de entrega para convertir la cotización en pedido */}
         {pidiendoFechaPara && (
