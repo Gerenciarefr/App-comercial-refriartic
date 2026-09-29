@@ -373,6 +373,21 @@ export default function HojaDeRuta() {
   // de todos al abrirla.
   const idsParaEntregas = useMemo(() => asesores.map((a) => a.id), [asesores])
 
+  // Punto 12: notificación de puntos perdidos ayer por misiones incompletas
+  // (punto 11). Como solo se consulta la fecha de "ayer" respecto a hoy, la
+  // notificación desaparece sola al día siguiente, sin necesidad de marcarla
+  // como leída. El director ve la de todo el equipo; el asesor, solo la suya.
+  const [notifPenalizaciones, setNotifPenalizaciones] = useState([])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    const ayer = aYMD(sumarDias(new Date(), -1))
+    let query = supabase.from('penalizaciones_ranking').select('asesor_id, puntos, motivo').eq('fecha', ayer)
+    if (!esDirector) query = query.eq('asesor_id', profile.id)
+
+    query.then(({ data }) => setNotifPenalizaciones(data || []))
+  }, [profile, esDirector])
+
   const nombreAsesorId = useCallback(
     (id) => {
       if (!esDirector) return profile?.full_name || profile?.nombre || 'Yo'
@@ -584,6 +599,26 @@ export default function HojaDeRuta() {
       )}
 
       <main className="px-4 -mt-2 space-y-4">
+        {/* Punto 12: recuadro de notificaciones — por ahora solo avisa los
+            puntos perdidos ayer en el ranking por misiones sin completar
+            (punto 11). Se arma arriba del calendario para que sea lo primero
+            que se vea al entrar a Ruta. */}
+        {notifPenalizaciones.length > 0 && (
+          <div className="rounded-2xl p-3" style={{ backgroundColor: '#FCEEEE', border: '0.5px solid #F3C6C6' }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: '#9B2C2C' }}>
+              ⚠ Puntos perdidos ayer en el ranking
+            </p>
+            <div className="space-y-0.5">
+              {notifPenalizaciones.map((n) => (
+                <p key={n.asesor_id} className="text-[11px]" style={{ color: '#9B2C2C' }}>
+                  {esDirector ? `${nombreAsesorId(n.asesor_id)}: ` : ''}
+                  -{n.puntos} punto{n.puntos !== 1 ? 's' : ''} · {n.motivo}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Controles: vista, navegación, filtro de asesor */}
         <div className="rounded-2xl p-3 space-y-3" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
           <div className="flex items-center justify-between">
