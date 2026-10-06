@@ -268,7 +268,11 @@ export default function NicoResumen() {
   // fecha real de hoy — si no, cuando la semana en curso cruza dos meses
   // (p. ej. empieza el 31 de agosto), el resumen seguía marcando el mes
   // anterior aunque ya hubiera arrancado el nuevo mes.
-  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : semana.inicio
+  // En semanas pasadas se usa el mediodía del lunes: con la fecha sola
+  // ('2026-06-01') JavaScript la interpreta en UTC y, en hora Colombia, cae
+  // en el día anterior — una semana que empieza el día 1 mostraba el mes
+  // anterior y no coincidía con el ranking.
+  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : `${semana.inicio}T12:00:00`
   const mes = rangoMes(referenciaPeriodo)
   const trimestre = rangoTrimestre(referenciaPeriodo)
   const anio = rangoAnio(referenciaPeriodo)
@@ -334,7 +338,7 @@ export default function NicoResumen() {
       const leadIds = (todosLeads || []).map((l) => l.id)
       const clientIds = (todosClientes || []).map((c) => c.id)
 
-      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }, { data: abonosRango }] =
+      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }, { data: abonosRango }, { data: cotClientes }] =
         await Promise.all([
           supabase
             .from('leads')
@@ -374,6 +378,15 @@ export default function NicoResumen() {
             .in('pagos_factura.asesor_id', asesorIds)
             .gte('fecha_abono', rangoInicio.slice(0, 10))
             .lt('fecha_abono', rangoFinExclusivo.slice(0, 10)),
+          // Cotizaciones a clientes existentes: cuentan como cotización
+          // formal (mismo criterio y mismos 5 puntos que fn_ranking_semana).
+          // Registro permanente: se conserva aunque la cotización se rechace.
+          supabase
+            .from('cotizaciones_clientes_registro')
+            .select('asesor_id, created_at')
+            .in('asesor_id', asesorIds)
+            .gte('created_at', rangoInicio)
+            .lt('created_at', rangoFinExclusivo),
         ])
 
       const enSemana = (fecha) => fecha >= semana.inicio && fecha < semana.finExclusivo
@@ -426,6 +439,13 @@ export default function NicoResumen() {
           if (esSemana) s.cotInformalSemana += 1
           if (esMes) s.cotInformalMes += 1
         }
+      })
+
+      ;(cotClientes || []).forEach((c) => {
+        const s = porAsesor[c.asesor_id]
+        if (!s) return
+        if (enSemana(c.created_at)) s.cotFormalSemana += 1
+        if (enMes(c.created_at)) s.cotFormalMes += 1
       })
 
       ;(pedidos || []).forEach((p) => {

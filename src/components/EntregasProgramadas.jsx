@@ -35,6 +35,7 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
   const [cursor, setCursor] = useState(new Date())
   const [entregasPorDia, setEntregasPorDia] = useState({})
   const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(null)
 
   const inicioSemana = useMemo(() => lunesDeLaSemana(cursor), [cursor])
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => sumarDias(inicioSemana, i)), [inicioSemana])
@@ -51,101 +52,47 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
     [asesores, profile]
   )
 
+  // Las entregas de TODOS los asesores se piden a la función
+  // fn_entregas_semana de la base de datos. Antes se consultaban las tablas
+  // directamente (automated_tasks, order_ops, clients...), pero las reglas de
+  // seguridad solo dejan a cada asesor leer lo suyo, así que un asesor veía
+  // únicamente sus propias entregas. La función devuelve solo lo que muestra
+  // esta tarjeta: asesor, cliente, pedido, OP, ubicación y si ya se entregó.
   const cargar = useCallback(async () => {
-    if (!asesoresVisibles || asesoresVisibles.length === 0) {
-      setEntregasPorDia({})
-      setCargando(false)
-      return
-    }
     setCargando(true)
 
     const inicioStr = aYMD(inicioSemana)
     const finStr = aYMD(sumarDias(inicioSemana, 6))
 
-    const { data: entregas } = await supabase
-      .from('automated_tasks')
-      .select('id, asesor_id, op_id, fecha_programada, completado_at')
-      .eq('tipo', 'entrega_cliente')
-      .in('asesor_id', asesoresVisibles)
-      .gte('fecha_programada', inicioStr)
-      .lte('fecha_programada', finStr)
+    const { data, error } = await supabase.rpc('fn_entregas_semana', { p_desde: inicioStr, p_hasta: finStr })
 
-    const { data: entregasManuales } = await supabase
-      .from('manual_tasks')
-      .select('id, asesor_id, titulo, lead_id, client_id, fecha_programada, lugar, completado_at')
-      .eq('mostrar_en_entregas', true)
-      .in('asesor_id', asesoresVisibles)
-      .gte('fecha_programada', inicioStr)
-      .lte('fecha_programada', finStr)
+    if (error) {
+      console.error(error)
+      setErrorCarga('No se pudieron cargar las entregas. Intenta de nuevo.')
+      setEntregasPorDia({})
+      setCargando(false)
+      return
+    }
+    setErrorCarga(null)
 
-    const opIds = [...new Set((entregas || []).map((e) => e.op_id).filter(Boolean))]
-
-    const [{ data: pedidos }, { data: opsPedido }] = await Promise.all([
-      opIds.length > 0
-        ? supabase.from('order_ops').select('id, client_id, numero_pedido, ubicacion_entrega').in('id', opIds)
-        : Promise.resolve({ data: [] }),
-      opIds.length > 0
-        ? supabase.from('pedido_ops').select('order_op_id, codigo_op').in('order_op_id', opIds)
-        : Promise.resolve({ data: [] }),
-    ])
-
-    const pedidosMap = Object.fromEntries((pedidos || []).map((p) => [p.id, p]))
-    const clientIds = new Set((pedidos || []).map((p) => p.client_id).filter(Boolean))
-    const leadIdsManual = [...new Set((entregasManuales || []).map((t) => t.lead_id).filter(Boolean))]
-    const clientIdsManual = (entregasManuales || []).map((t) => t.client_id).filter(Boolean)
-    clientIdsManual.forEach((id) => clientIds.add(id))
-
-    const [{ data: clientes }, { data: leadsManual }] = await Promise.all([
-      clientIds.size > 0
-        ? supabase.from('clients').select('id, empresa, nombre_contacto').in('id', [...clientIds])
-        : Promise.resolve({ data: [] }),
-      leadIdsManual.length > 0
-        ? supabase.from('leads').select('id, empresa, nombre_contacto').in('id', leadIdsManual)
-        : Promise.resolve({ data: [] }),
-    ])
-    const clientesMap = Object.fromEntries((clientes || []).map((c) => [c.id, c]))
-    const leadsManualMap = Object.fromEntries((leadsManual || []).map((l) => [l.id, l]))
-
-    const opsPorPedido = {}
-    ;(opsPedido || []).forEach((o) => {
-      opsPorPedido[o.order_op_id] = opsPorPedido[o.order_op_id] || []
-      opsPorPedido[o.order_op_id].push(o.codigo_op)
-    })
+    // Si el director está filtrando por asesores, se respeta ese filtro.
+    const visibles = asesoresVisibles && asesoresVisibles.length > 0 ? new Set(asesoresVisibles) : null
 
     const porDia = {}
-    ;(entregas || []).forEach((e) => {
-      const pedido = pedidosMap[e.op_id]
-      const cliente = pedido ? clientesMap[pedido.client_id] : null
+    ;(data || []).forEach((e) => {
+      if (visibles && !visibles.has(e.asesor_id)) return
       const clave = e.fecha_programada
       porDia[clave] = porDia[clave] || []
       porDia[clave].push({
-        id: `auto-${e.id}`,
-        cumplida: !!e.completado_at,
+        id: e.id,
+        cumplida: !!e.cumplida,
         iniciales: iniciales(nombreAsesorId(e.asesor_id)),
         nombreAsesor: nombreAsesorId(e.asesor_id),
-        cliente: cliente?.empresa || cliente?.nombre_contacto || 'Cliente sin nombre',
-        numeroPedido: pedido?.numero_pedido || '—',
-        ubicacion: pedido?.ubicacion_entrega || null,
-        ops: pedido ? opsPorPedido[pedido.id] || [] : [],
-      })
-    })
-
-    // Misiones manuales marcadas para aparecer aquí — mismo formato de
-    // tarjeta, pero sin número de pedido (se muestra el título en su lugar).
-    ;(entregasManuales || []).forEach((t) => {
-      const contacto = t.client_id ? clientesMap[t.client_id] : t.lead_id ? leadsManualMap[t.lead_id] : null
-      const clave = t.fecha_programada
-      porDia[clave] = porDia[clave] || []
-      porDia[clave].push({
-        id: `manual-${t.id}`,
-        cumplida: !!t.completado_at,
-        iniciales: iniciales(nombreAsesorId(t.asesor_id)),
-        nombreAsesor: nombreAsesorId(t.asesor_id),
-        cliente: contacto?.empresa || contacto?.nombre_contacto || t.titulo,
-        numeroPedido: null,
-        titulo: t.titulo,
-        ubicacion: t.lugar || null,
-        ops: [],
+        cliente: e.cliente,
+        numeroPedido: e.numero_pedido,
+        titulo: e.titulo,
+        ubicacion: e.ubicacion || null,
+        ops: e.ops || [],
       })
     })
 
@@ -187,6 +134,8 @@ export default function EntregasProgramadas({ asesoresVisibles, asesores, esDire
             ›
           </button>
         </div>
+
+        {errorCarga && <p className="text-center text-xs text-red-600 py-2">{errorCarga}</p>}
 
         {cargando ? (
           <p className="text-center text-xs text-slate-400 py-10">Cargando entregas...</p>

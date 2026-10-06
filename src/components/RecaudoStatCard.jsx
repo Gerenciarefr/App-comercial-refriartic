@@ -35,7 +35,20 @@ function inicioMesStr() {
 // Punto 1: la misma tarjeta de "Prospección" / "Ventas hechas" pero para el
 // recaudo de la semana y el mes, en la grilla principal de estadísticas del
 // asesor (además del texto que ya se ve dentro de Recaudos, más abajo).
-export default function RecaudoStatCard({ asesorId }) {
+//
+// Por defecto muestra la semana y el mes en curso. Si la pantalla está
+// viendo una semana pasada, puede pasar los rangos (fechas 'YYYY-MM-DD', el
+// "hasta" no se incluye) para que el recaudo corresponda a esa semana y a
+// su mes, igual que el resto de tarjetas.
+export default function RecaudoStatCard({
+  asesorId,
+  semanaDesde,
+  semanaHasta,
+  mesDesde,
+  mesHasta,
+  textoSemana = 'esta semana',
+  textoMes = 'este mes',
+}) {
   const [semana, setSemana] = useState(0)
   const [mes, setMes] = useState(0)
 
@@ -53,18 +66,18 @@ export default function RecaudoStatCard({ asesorId }) {
       .select('valor_abonado, fecha_abono')
       .in('pago_id', pagoIds)
 
-    const inicioSemana = inicioSemanaStr()
-    const inicioMes = inicioMesStr()
+    const inicioSemana = semanaDesde || inicioSemanaStr()
+    const inicioMes = mesDesde || inicioMesStr()
     let s = 0
     let m = 0
     ;(abonos || []).forEach((a) => {
       const valor = Number(a.valor_abonado || 0)
-      if (a.fecha_abono >= inicioMes) m += valor
-      if (a.fecha_abono >= inicioSemana) s += valor
+      if (a.fecha_abono >= inicioMes && (!mesHasta || a.fecha_abono < mesHasta)) m += valor
+      if (a.fecha_abono >= inicioSemana && (!semanaHasta || a.fecha_abono < semanaHasta)) s += valor
     })
     setSemana(s)
     setMes(m)
-  }, [asesorId])
+  }, [asesorId, semanaDesde, semanaHasta, mesDesde, mesHasta])
 
   useEffect(() => {
     cargar()
@@ -74,10 +87,10 @@ export default function RecaudoStatCard({ asesorId }) {
     <div className="rounded-2xl p-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
       <p className="text-xs font-medium mb-2" style={{ color: C.textSecondary }}>Recaudo</p>
       <p className="text-lg font-bold leading-tight" style={{ color: C.textPrimary }}>{formatoCOP.format(semana)}</p>
-      <p className="text-[11px]" style={{ color: C.textMuted }}>esta semana</p>
+      <p className="text-[11px]" style={{ color: C.textMuted }}>{textoSemana}</p>
       <div className="h-px my-2" style={{ backgroundColor: C.border }} />
       <p className="text-base font-semibold leading-tight" style={{ color: C.textSecondary }}>{formatoCOP.format(mes)}</p>
-      <p className="text-[11px]" style={{ color: C.textMuted }}>este mes</p>
+      <p className="text-[11px]" style={{ color: C.textMuted }}>{textoMes}</p>
     </div>
   )
 }

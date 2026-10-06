@@ -63,6 +63,13 @@ function iniciales(nombreCompleto) {
   return partes.slice(0, 2).map((p) => p[0].toUpperCase()).join('')
 }
 
+// Fecha local 'YYYY-MM-DD' de un instante ISO (para comparar contra columnas
+// de solo fecha, como la fecha de un abono).
+function ymdLocal(iso) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // Calcula el rango del mes calendario (día 1 al último) que contiene la
 // fecha de referencia dada — se usa la fecha de inicio de la semana
 // seleccionada, para que al navegar semanas pasadas el "mes" mostrado
@@ -159,7 +166,11 @@ export default function AsesorDetalle() {
   // el mes se calcula sobre la fecha real de hoy, no sobre el inicio de
   // la semana, para que no siga marcando el mes anterior cuando la semana
   // en curso cruza dos meses.
-  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : semana.inicio
+  // En semanas pasadas se usa el mediodía del lunes: con la fecha sola
+  // ('2026-06-01') JavaScript la interpreta en UTC y, en hora Colombia, cae
+  // en el día anterior — una semana que empieza el día 1 mostraba el mes
+  // anterior y no coincidía con el ranking.
+  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : `${semana.inicio}T12:00:00`
   const mes = rangoMes(referenciaPeriodo)
 
   useEffect(() => {
@@ -229,7 +240,11 @@ export default function AsesorDetalle() {
         const leadIds = (leadsDelAsesor || []).map((l) => l.id)
         const clientIds = (clientesDelAsesor || []).map((c) => c.id)
 
-        const [{ data: historialCot, error: eHC }, { data: pedidos, error: ePed }] = await Promise.all([
+        // Las cotizaciones hechas a clientes que ya existen también cuentan
+        // como cotización formal (mismo criterio y mismos 5 puntos que usa
+        // fn_ranking_semana). Se leen del registro permanente, que conserva
+        // la cotización aunque después se rechace o se borre.
+        const [{ data: historialCot, error: eHC }, { data: pedidos, error: ePed }, { data: cotClientes, error: eCC }] = await Promise.all([
           leadIds.length > 0
             ? supabase
                 .from('lead_stage_history')
@@ -247,9 +262,15 @@ export default function AsesorDetalle() {
                 .gte('created_at', rangoInicio)
                 .lt('created_at', rangoFinExclusivo)
             : Promise.resolve({ data: [], error: null }),
+          supabase
+            .from('cotizaciones_clientes_registro')
+            .select('created_at')
+            .eq('asesor_id', id)
+            .gte('created_at', rangoInicio)
+            .lt('created_at', rangoFinExclusivo),
         ])
 
-        if (eHC || ePed) throw eHC || ePed
+        if (eHC || ePed || eCC) throw eHC || ePed || eCC
 
         setAsesor(perfil)
         setForm({
@@ -279,8 +300,12 @@ export default function AsesorDetalle() {
         const llamadasSemana = (llamadasRango || []).filter((l) => enSemana(l.created_at)).length
         const llamadasMes = (llamadasRango || []).filter((l) => enMes(l.created_at)).length
 
-        const cotFormalSemana = (historialCot || []).filter((h) => h.estado === 'cotizacion_formal' && enSemana(h.changed_at)).length
-        const cotFormalMes = (historialCot || []).filter((h) => h.estado === 'cotizacion_formal' && enMes(h.changed_at)).length
+        const cotClientesSemana = (cotClientes || []).filter((c) => enSemana(c.created_at)).length
+        const cotClientesMes = (cotClientes || []).filter((c) => enMes(c.created_at)).length
+        const cotFormalSemana =
+          (historialCot || []).filter((h) => h.estado === 'cotizacion_formal' && enSemana(h.changed_at)).length + cotClientesSemana
+        const cotFormalMes =
+          (historialCot || []).filter((h) => h.estado === 'cotizacion_formal' && enMes(h.changed_at)).length + cotClientesMes
         const cotInformalSemana = (historialCot || []).filter((h) => h.estado === 'cotizacion_informal' && enSemana(h.changed_at)).length
         const cotInformalMes = (historialCot || []).filter((h) => h.estado === 'cotizacion_informal' && enMes(h.changed_at)).length
 
@@ -637,7 +662,13 @@ export default function AsesorDetalle() {
                 <h2 className="text-sm font-semibold mb-2 px-1" style={{ color: C.textPrimary }}>Ventas</h2>
                 <div className="grid grid-cols-2 gap-3">
                   <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
-                  <RecaudoStatCard asesorId={id} />
+                  <RecaudoStatCard
+                    asesorId={id}
+                    semanaDesde={semana.inicio}
+                    semanaHasta={semana.finExclusivo}
+                    mesDesde={ymdLocal(mes.inicio)}
+                    mesHasta={ymdLocal(mes.finExclusivo)}
+                  />
                 </div>
               </div>
 

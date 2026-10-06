@@ -78,6 +78,16 @@ const IconDollar = (props) => (
     <path d="M17 5.5c0-1.9-2.2-3.5-5-3.5s-5 1.6-5 3.5S9.2 9 12 9s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5" />
   </IconBase>
 )
+const IconChevronLeft = (props) => (
+  <IconBase {...props}>
+    <polyline points="15 18 9 12 15 6" />
+  </IconBase>
+)
+const IconChevronRight = (props) => (
+  <IconBase {...props}>
+    <polyline points="9 18 15 12 9 6" />
+  </IconBase>
+)
 const IconTrophy = (props) => (
   <IconBase {...props}>
     <path d="M8 21h8" />
@@ -135,6 +145,13 @@ const IconUsers = (props) => (
   </IconBase>
 )
 
+// Fecha local 'YYYY-MM-DD' de un instante ISO (para comparar contra columnas
+// de solo fecha, como la fecha de un abono).
+function ymdLocal(iso) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function rangoMes(fechaReferencia) {
   const ref = new Date(fechaReferencia)
   const inicio = new Date(ref.getFullYear(), ref.getMonth(), 1)
@@ -186,6 +203,9 @@ function statsVacias() {
 export default function PerfilAsesor() {
   const { profile } = useAuth()
   const asesorId = profile?.id
+  // Semana que se está viendo: 0 = actual, -1 = la anterior, etc. Igual que
+  // en el resumen del director, pero aquí siempre con los datos propios.
+  const [offsetSemana, setOffsetSemana] = useState(0)
   const [detalleVentasAbierto, setDetalleVentasAbierto] = useState(false)
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
 
@@ -207,14 +227,20 @@ export default function PerfilAsesor() {
   const [metasComerciales, setMetasComerciales] = useState([])
   const [periodoMetas, setPeriodoMetas] = useState('mensual')
 
-  const semana = rangoSemana(0)
-  // Mes/trimestre/año siempre sobre la fecha real de hoy (no sobre el
-  // inicio de la semana) — si no, cuando la semana en curso cruza dos
-  // meses, el resumen del asesor seguía marcando el mes anterior.
-  const hoyIso = new Date().toISOString()
-  const mes = rangoMes(hoyIso)
-  const trimestre = rangoTrimestre(hoyIso)
-  const anio = rangoAnio(hoyIso)
+  const semana = rangoSemana(offsetSemana)
+  // En la semana actual, mes/trimestre/año van sobre la fecha real de hoy
+  // (no sobre el inicio de la semana) — si no, cuando la semana en curso
+  // cruza dos meses, el resumen seguía marcando el mes anterior. En una
+  // semana pasada se usan el mes, trimestre y año de esa semana (mediodía del
+  // lunes, para que la zona horaria no la corra al día anterior), igual que
+  // hace fn_ranking_semana con los puntos del mes.
+  const referenciaPeriodo = offsetSemana === 0 ? new Date().toISOString() : `${semana.inicio}T12:00:00`
+  const mes = rangoMes(referenciaPeriodo)
+  const trimestre = rangoTrimestre(referenciaPeriodo)
+  const anio = rangoAnio(referenciaPeriodo)
+  // Textos de periodo: al mirar una semana pasada no debe decir "esta semana".
+  const textoSemana = offsetSemana === 0 ? 'esta semana' : 'esa semana'
+  const textoMes = offsetSemana === 0 ? 'este mes' : 'ese mes'
 
   const cargar = useCallback(async () => {
     if (!asesorId) return
@@ -228,11 +254,11 @@ export default function PerfilAsesor() {
 
       // Ranking completo solo se usa para calcular MI puesto — nunca se
       // muestra la lista completa de todos los asesores en pantalla.
-      // fn_ranking_semana(0) = semana actual, con puntaje_semana y
+      // fn_ranking_semana(offset) = semana elegida, con puntaje_semana y
       // puntaje_mes ya calculados (mismo origen que usa el director en
       // Resumen general, para que el puesto y los puntos coincidan siempre).
       const [{ data: rankingData, error: e1 }, { data: metasComercialesData, error: e2 }] = await Promise.all([
-        supabase.rpc('fn_ranking_semana', { p_offset_semanas: 0 }),
+        supabase.rpc('fn_ranking_semana', { p_offset_semanas: offsetSemana }),
         supabase.from('metas_comerciales').select('*'),
       ])
 
@@ -255,7 +281,7 @@ export default function PerfilAsesor() {
       const leadIds = (misLeads || []).map((l) => l.id)
       const clientIds = (misClientes || []).map((c) => c.id)
 
-      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }] =
+      const [{ data: leadsRango }, { data: historialCot }, { data: pedidos }, { data: manuales }, { data: cotClientes }] =
         await Promise.all([
           supabase
             .from('leads')
@@ -287,6 +313,16 @@ export default function PerfilAsesor() {
             .eq('asesor_id', asesorId)
             .gte('fecha_programada', semana.inicio)
             .lte('fecha_programada', semana.fin),
+          // Cotizaciones hechas a clientes que ya existen: cuentan como
+          // cotización formal (mismo criterio y mismos 5 puntos que usa
+          // fn_ranking_semana). Registro permanente: se conserva aunque la
+          // cotización después se rechace o se borre.
+          supabase
+            .from('cotizaciones_clientes_registro')
+            .select('created_at')
+            .eq('asesor_id', asesorId)
+            .gte('created_at', rangoInicio)
+            .lt('created_at', rangoFinExclusivo),
         ])
 
       const enSemana = (fecha) => fecha >= semana.inicio && fecha < semana.finExclusivo
@@ -318,6 +354,11 @@ export default function PerfilAsesor() {
           if (esSemana) s.cotInformalSemana += 1
           if (esMes) s.cotInformalMes += 1
         }
+      })
+
+      ;(cotClientes || []).forEach((c) => {
+        if (enSemana(c.created_at)) s.cotFormalSemana += 1
+        if (enMes(c.created_at)) s.cotFormalMes += 1
       })
 
       ;(pedidos || []).forEach((p) => {
@@ -402,7 +443,7 @@ export default function PerfilAsesor() {
       setCargando(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asesorId])
+  }, [asesorId, offsetSemana])
 
   useEffect(() => {
     cargar()
@@ -410,8 +451,9 @@ export default function PerfilAsesor() {
 
   // Punto 5: una vez se sabe la posición actual, se busca la nota programada
   // por el director para ese puesto.
+  // La nota habla del puesto de hoy, así que solo se muestra en la semana actual.
   useEffect(() => {
-    if (!miPosicion) {
+    if (!miPosicion || offsetSemana !== 0) {
       setNotaRanking(null)
       return
     }
@@ -421,7 +463,7 @@ export default function PerfilAsesor() {
       .eq('posicion', miPosicion)
       .maybeSingle()
       .then(({ data }) => setNotaRanking(data?.mensaje?.trim() || null))
-  }, [miPosicion])
+  }, [miPosicion, offsetSemana])
 
   const toggleCategoria = (value) => {
     setCategoriasSeleccionadas((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]))
@@ -485,6 +527,41 @@ export default function PerfilAsesor() {
           <div className="rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2">{error}</div>
         )}
 
+        {/* Navegador de semana — mismo control que usa el director. Va fuera
+            del bloque de carga para que no desaparezca al cambiar de semana. */}
+        <div
+          className="rounded-2xl p-3 flex items-center justify-between relative z-10"
+          style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}
+        >
+          <button
+            onClick={() => setOffsetSemana((o) => o - 1)}
+            className="p-1.5 rounded-lg flex items-center gap-1 text-sm font-medium"
+            style={{ color: C.navy }}
+          >
+            <IconChevronLeft size={16} />
+            Anterior
+          </button>
+          <div className="text-center">
+            <p className="text-sm font-semibold" style={{ color: C.textPrimary }}>{semana.etiqueta}</p>
+            {offsetSemana === 0 ? (
+              <p className="text-[11px]" style={{ color: C.orange }}>Semana actual</p>
+            ) : (
+              <button onClick={() => setOffsetSemana(0)} className="text-[11px] underline" style={{ color: C.textSecondary }}>
+                Volver a la semana actual
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setOffsetSemana((o) => o + 1)}
+            disabled={offsetSemana >= 0}
+            className="p-1.5 rounded-lg flex items-center gap-1 text-sm font-medium disabled:opacity-30"
+            style={{ color: C.navy }}
+          >
+            Siguiente
+            <IconChevronRight size={16} />
+          </button>
+        </div>
+
         {cargando ? (
           <p className="text-center text-sm py-6" style={{ color: C.textMuted }}>
             Cargando...
@@ -497,7 +574,7 @@ export default function PerfilAsesor() {
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <IconDollar size={14} style={{ color: C.orange }} />
                   <p className="text-xs" style={{ color: C.orange }}>
-                    Valor vendido — esta semana
+                    Valor vendido — {textoSemana}
                   </p>
                 </div>
                 <p className="text-3xl font-extrabold text-white leading-tight">
@@ -510,10 +587,10 @@ export default function PerfilAsesor() {
                 <button
                   onClick={() => setDetalleVentasAbierto(true)}
                   className="w-full flex justify-between items-baseline text-left"
-                  title="Ver detalle de clientes de este mes"
+                  title={`Ver detalle de clientes de ${textoMes}`}
                 >
                   <p className="text-xs" style={{ color: C.orange }}>
-                    Este mes
+                    {offsetSemana === 0 ? 'Este mes' : 'Ese mes'}
                   </p>
                   <p className="text-base font-bold text-white underline decoration-dotted">{formatoCOP.format(stats.valorMesSinIva)}</p>
                 </button>
@@ -523,7 +600,7 @@ export default function PerfilAsesor() {
             <DetalleVentasModal
               abierto={detalleVentasAbierto}
               onClose={() => setDetalleVentasAbierto(false)}
-              titulo="Ventas de este mes"
+              titulo={`Ventas de ${textoMes}`}
               asesorIds={asesorId ? [asesorId] : []}
               desde={mes.inicio}
               hastaExclusivo={mes.finExclusivo}
@@ -548,7 +625,7 @@ export default function PerfilAsesor() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold" style={{ color: C.textPrimary }}>
-                    {miPosicion ? `Puesto ${miPosicion} de ${totalAsesores}` : 'Aún no hay datos esta semana'}
+                    {miPosicion ? `Puesto ${miPosicion} de ${totalAsesores}` : `Aún no hay datos ${textoSemana}`}
                   </p>
                   {miFilaRanking && (
                     <p className="text-xs mt-0.5" style={{ color: C.textSecondary }}>
@@ -642,8 +719,8 @@ export default function PerfilAsesor() {
                 <div>
                   <SectionTitle icon={<IconUsers size={14} style={{ color: C.textPrimary }} />} texto="Leads" />
                   <div className="grid grid-cols-2 gap-3">
-                    <StatCard label="Prospección" semana={stats.leadsProspeccionSemana} mes={stats.leadsProspeccionMes} />
-                    <StatCard label="Llamadas" semana={stats.llamadasSemana} mes={stats.llamadasMes} />
+                    <StatCard textoSemana={textoSemana} textoMes={textoMes} label="Prospección" semana={stats.leadsProspeccionSemana} mes={stats.leadsProspeccionMes} />
+                    <StatCard textoSemana={textoSemana} textoMes={textoMes} label="Llamadas" semana={stats.llamadasSemana} mes={stats.llamadasMes} />
                   </div>
                 </div>
               )}
@@ -652,8 +729,8 @@ export default function PerfilAsesor() {
                 <div>
                   <SectionTitle icon={<IconChart size={14} style={{ color: C.textPrimary }} />} texto="Cotizaciones" />
                   <div className="grid grid-cols-2 gap-3">
-                    <StatCard label="Formales" semana={stats.cotFormalSemana} mes={stats.cotFormalMes} />
-                    <StatCard label="Informales" semana={stats.cotInformalSemana} mes={stats.cotInformalMes} />
+                    <StatCard textoSemana={textoSemana} textoMes={textoMes} label="Formales" semana={stats.cotFormalSemana} mes={stats.cotFormalMes} />
+                    <StatCard textoSemana={textoSemana} textoMes={textoMes} label="Informales" semana={stats.cotInformalSemana} mes={stats.cotInformalMes} />
                   </div>
                 </div>
               )}
@@ -662,8 +739,16 @@ export default function PerfilAsesor() {
                 <div>
                   <SectionTitle icon={<IconRocket size={14} style={{ color: C.textPrimary }} />} texto="Ventas" />
                   <div className="grid grid-cols-2 gap-2">
-                    <StatCard label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
-                    <RecaudoStatCard asesorId={asesorId} />
+                    <StatCard textoSemana={textoSemana} textoMes={textoMes} label="Ventas hechas" semana={stats.ventasSemana} mes={stats.ventasMes} />
+                    <RecaudoStatCard
+                      asesorId={asesorId}
+                      semanaDesde={semana.inicio}
+                      semanaHasta={semana.finExclusivo}
+                      mesDesde={ymdLocal(mes.inicio)}
+                      mesHasta={ymdLocal(mes.finExclusivo)}
+                      textoSemana={textoSemana}
+                      textoMes={textoMes}
+                    />
                   </div>
                 </div>
               )}
@@ -741,7 +826,7 @@ function SectionTitle({ icon, texto }) {
   )
 }
 
-function StatCard({ label, semana, mes }) {
+function StatCard({ label, semana, mes, textoSemana = 'esta semana', textoMes = 'este mes' }) {
   return (
     <div className="rounded-2xl p-4" style={{ backgroundColor: C.card, border: `0.5px solid ${C.border}` }}>
       <p className="text-xs font-medium mb-2" style={{ color: C.textSecondary }}>
@@ -751,14 +836,14 @@ function StatCard({ label, semana, mes }) {
         {semana}
       </p>
       <p className="text-[11px]" style={{ color: C.textMuted }}>
-        esta semana
+        {textoSemana}
       </p>
       <div className="h-px my-2" style={{ backgroundColor: C.border }} />
       <p className="text-base font-semibold leading-tight" style={{ color: C.textSecondary }}>
         {mes}
       </p>
       <p className="text-[11px]" style={{ color: C.textMuted }}>
-        este mes
+        {textoMes}
       </p>
     </div>
   )

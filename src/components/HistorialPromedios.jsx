@@ -113,7 +113,9 @@ export default function HistorialPromedios({ asesorId }) {
         const leadIds = (leadsDelAsesor || []).map((l) => l.id)
         const clientIds = (clientesDelAsesor || []).map((c) => c.id)
 
-        const [{ data: historialCot, error: eHC }, { data: pedidos, error: ePed }] = await Promise.all([
+        // Las cotizaciones a clientes existentes cuentan como cotización
+        // formal (igual que en el ranking). Se leen del registro permanente.
+        const [{ data: historialCot, error: eHC }, { data: pedidos, error: ePed }, { data: cotClientes, error: eCC }] = await Promise.all([
           leadIds.length > 0
             ? supabase
                 .from('lead_stage_history')
@@ -131,8 +133,14 @@ export default function HistorialPromedios({ asesorId }) {
                 .gte('created_at', inicioISO)
                 .lt('created_at', finISO)
             : Promise.resolve({ data: [], error: null }),
+          supabase
+            .from('cotizaciones_clientes_registro')
+            .select('created_at')
+            .eq('asesor_id', asesorId)
+            .gte('created_at', inicioISO)
+            .lt('created_at', finISO),
         ])
-        if (eHC || ePed) throw eHC || ePed
+        if (eHC || ePed || eCC) throw eHC || ePed || eCC
 
         if (cancelado) return
 
@@ -150,6 +158,9 @@ export default function HistorialPromedios({ asesorId }) {
             if (!enSemana(h.changed_at, semana)) return
             if (h.estado === 'cotizacion_formal') fila.cotFormal += 1
             else if (h.estado === 'cotizacion_informal') fila.cotInformal += 1
+          })
+          ;(cotClientes || []).forEach((c) => {
+            if (enSemana(c.created_at, semana)) fila.cotFormal += 1
           })
           ;(pedidos || []).forEach((p) => {
             if (!enSemana(p.created_at, semana)) return
