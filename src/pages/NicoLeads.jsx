@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import MensajesRapidos from '../components/MensajesRapidos'
 import { useAuth } from '../lib/AuthContext'
+import { useEstadosLead, estadoInfo } from '../lib/estadosLead'
 
 // --- Paleta Refriartic (misma que NicoResumen.jsx / PerfilAsesor.jsx) ---
 const C = {
@@ -16,17 +17,9 @@ const C = {
   textMuted: '#B4B2A9',
 }
 
-// Colores de estado — deliberadamente distintos del naranja de marca (que se
-// reserva para acciones/acentos) para que cada estado se distinga de un vistazo.
-const ESTADOS = [
-  { value: 'no_responde', label: 'No responde', bg: '#EDEDE7', text: '#5F5E5A' },
-  { value: 'contactado', label: 'Contactado', bg: '#E6F1FB', text: '#0C447C' },
-  { value: 'cotizacion_informal', label: 'Cotización Informal', bg: '#FAEEDA', text: '#854F0B' },
-  { value: 'cotizacion_formal', label: 'Cotización Formal', bg: '#EEEDFE', text: '#3C3489' },
-  { value: 'proximo_a_vender', label: 'Próximo a Vender', bg: '#FBEAF0', text: '#993556' },
-  { value: 'venta_perdida', label: 'Venta Perdida', bg: '#FCEBEB', text: '#A32D2D' },
-  { value: 'venta_hecha', label: 'Venta Hecha', bg: '#E1F5EE', text: '#085041' },
-]
+// Los estados del embudo (nombre, color y orden) ya no están fijos aquí:
+// vienen de la tabla `estados_lead`, que el director administra desde
+// Ajustes → "Estados de lead". Ver src/lib/estadosLead.js.
 
 const ORIGENES = [
   { value: 'prospeccion_asesor', label: 'Prospección asesor' },
@@ -57,10 +50,6 @@ function canalesPara(origen) {
 function labelCanal(origen, valor) {
   const c = canalesPara(origen).find((x) => x.value === valor)
   return c?.label || valor
-}
-
-function estadoInfo(estado) {
-  return ESTADOS.find((e) => e.value === estado) || { label: estado, bg: '#EDEDE7', text: '#5F5E5A' }
 }
 
 function soloNumeros(telefono) {
@@ -344,6 +333,7 @@ function ListaConDivisores({ leads, ...propsCard }) {
 export default function NicoLeads() {
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { estados: ESTADOS } = useEstadosLead()
   const modoApoyo = !!profile?.modo_apoyo_activo
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
   const [leads, setLeads] = useState([])
@@ -544,7 +534,8 @@ export default function NicoLeads() {
       origen: form.origen,
       canal_adquisicion: form.canal_adquisicion || null,
       asesor_id: form.asesor_id,
-      estado: 'no_responde',
+      // Sin `estado`: la base de datos le pone el estado inicial que el
+      // director tenga definido en Ajustes → "Estados de lead".
     })
 
     setGuardando(false)

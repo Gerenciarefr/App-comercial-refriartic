@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 import EtiquetasPicker from '../components/EtiquetasPicker'
+import { useEstadosLead, estadoInfo } from '../lib/estadosLead'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -16,15 +17,11 @@ const C = {
   textMuted: '#B4B2A9',
 }
 
-const ESTADOS = [
-  { value: 'no_responde', label: 'No responde', bg: '#EDEDE7', text: '#5F5E5A' },
-  { value: 'contactado', label: 'Contactado', bg: '#E6F1FB', text: '#0C447C' },
-  { value: 'cotizacion_informal', label: 'Cotización informal', bg: '#FAEEDA', text: '#854F0B' },
-  { value: 'cotizacion_formal', label: 'Cotización formal', bg: '#EEEDFE', text: '#3C3489' },
-  { value: 'proximo_a_vender', label: 'Próximo a vender', bg: '#FBEAF0', text: '#993556' },
-  { value: 'venta_perdida', label: 'Venta perdida', bg: '#FCEBEB', text: '#A32D2D' },
-  { value: 'venta_hecha', label: 'Venta hecha', bg: '#E1F5EE', text: '#085041' },
-]
+// Los estados del embudo (nombre, color y orden) vienen de la tabla
+// `estados_lead`, administrada por el director desde Ajustes → "Estados de
+// lead" (ver src/lib/estadosLead.js). Las claves protegidas —
+// cotizacion_informal, cotizacion_formal, venta_perdida y venta_hecha — nunca
+// cambian, por eso las validaciones de abajo siguen comparando contra ellas.
 
 const ORIGENES = [
   { value: 'prospeccion_asesor', label: 'Prospección asesor' },
@@ -40,10 +37,6 @@ const TIPO_TAREA_LABELS = {
   postventa_70_dias: 'Postventa · 70 días',
   postventa_270_dias: 'Postventa · 270 días',
   visita_programada: 'Visita programada',
-}
-
-function estadoInfo(estado) {
-  return ESTADOS.find((e) => e.value === estado) || { label: estado, bg: '#EDEDE7', text: '#5F5E5A' }
 }
 
 function soloNumeros(telefono) {
@@ -157,6 +150,7 @@ export default function NicoLeadDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { estados: ESTADOS } = useEstadosLead()
   const esDirector = profile?.rol === 'director' || profile?.role === 'director'
 
   const [lead, setLead] = useState(null)

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 import CrearMisionModal from '../components/CrearMisionModal'
 import EntregasProgramadas from '../components/EntregasProgramadas'
+import { useEstadosLead, estadoInfo } from '../lib/estadosLead'
 
 // --- Paleta Refriartic (misma que el resto de la plataforma) ---
 const C = {
@@ -93,26 +94,10 @@ const TIPO_VISITA_LABELS = {
 // Estados "rápidos" editables desde la Hoja de Ruta. "Venta hecha" queda
 // fuera a propósito: ese cambio exige correo, teléfono, valor cotizado y
 // código de cotización — se hace desde la ficha completa del lead.
-const ESTADOS_RAPIDOS = [
-  { value: 'no_responde', label: 'No responde' },
-  { value: 'contactado', label: 'Contactado' },
-  { value: 'cotizacion_informal', label: 'Cotización informal' },
-  { value: 'cotizacion_formal', label: 'Cotización formal' },
-  { value: 'proximo_a_vender', label: 'Próximo a vender' },
-  { value: 'venta_perdida', label: 'Venta perdida' },
-]
-
-// Color de fondo/texto del selector de estado, según valor actual — misma
-// paleta semántica usada en NicoLeads.jsx / NicoLeadDetalle.jsx.
-const ESTADO_COLOR = {
-  no_responde: { bg: '#EDEDE7', text: '#5F5E5A' },
-  contactado: { bg: '#E6F1FB', text: '#0C447C' },
-  cotizacion_informal: { bg: '#FAEEDA', text: '#854F0B' },
-  cotizacion_formal: { bg: '#EEEDFE', text: '#3C3489' },
-  proximo_a_vender: { bg: '#FBEAF0', text: '#993556' },
-  venta_hecha: { bg: '#E1F5EE', text: '#085041' },
-  venta_perdida: { bg: '#FCEBEB', text: '#A32D2D' },
-}
+// La lista (nombre, color y orden) viene de la tabla `estados_lead`, que el
+// director administra desde Ajustes → "Estados de lead"; aquí solo se le
+// quita "venta_hecha". Ver src/lib/estadosLead.js y DiaDetalleModal.
+const CLAVE_VENTA_HECHA = 'venta_hecha'
 
 const TIPOS_SEGUIMIENTO_LEAD = [
   'contactar_lead',
@@ -764,6 +749,8 @@ export default function HojaDeRuta() {
 }
 
 function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId, onClose, onToggleCumplida, onReprogramada, onMisionEliminada }) {
+  const { estados: estadosLead } = useEstadosLead()
+  const ESTADOS_RAPIDOS = estadosLead.filter((e) => e.value !== CLAVE_VENTA_HECHA)
   const [expandidoId, setExpandidoId] = useState(null)
   const [extra, setExtra] = useState({}) // { [misionId]: { telefono, nombreContacto, estadoLead, tareaCompletable, cargando } }
   const [mensajes, setMensajes] = useState([])
@@ -1103,8 +1090,8 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                             className="w-full rounded-lg px-2 py-1.5 text-xs font-medium"
                             style={{
                               border: `0.5px solid ${C.border}`,
-                              backgroundColor: ESTADO_COLOR[datos.estadoLead]?.bg || '#FFFFFF',
-                              color: ESTADO_COLOR[datos.estadoLead]?.text || C.textSecondary,
+                              backgroundColor: datos.estadoLead ? estadoInfo(datos.estadoLead).bg : '#FFFFFF',
+                              color: datos.estadoLead ? estadoInfo(datos.estadoLead).text : C.textSecondary,
                             }}
                           >
                             <option value="" disabled>
@@ -1115,7 +1102,9 @@ function DiaDetalleModal({ fecha, misiones, esDirector, profile, nombreAsesorId,
                                 {s.label}
                               </option>
                             ))}
-                            {datos.estadoLead === 'venta_hecha' && <option value="venta_hecha">Venta hecha</option>}
+                            {datos.estadoLead === CLAVE_VENTA_HECHA && (
+                              <option value={CLAVE_VENTA_HECHA}>{estadoInfo(CLAVE_VENTA_HECHA).label}</option>
+                            )}
                           </select>
 
                           {/* Motivo de venta perdida — reemplaza el viejo prompt() nativo,
